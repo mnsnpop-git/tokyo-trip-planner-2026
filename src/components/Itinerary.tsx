@@ -1,5 +1,6 @@
 "use client";
 
+import { useReadOnly } from "./ReadOnly";
 import { useState } from "react";
 import {
   EMPTY_PLACE,
@@ -322,7 +323,16 @@ function OotdLine({
   onEdit: () => void;
   onViewImage: (index: number) => void;
 }) {
+  const readOnly = useReadOnly();
   if (!ootd.theme && ootd.images.length === 0) {
+    if (readOnly) {
+      return (
+        <p className="mt-1.5 flex items-center gap-2 text-xs text-ink-soft/70">
+          <span className="font-medium tracking-wide">👗 OOTD</span>
+          <span>ไม่มีธีมชุด</span>
+        </p>
+      );
+    }
     return (
       <button onClick={onEdit} className="mt-1.5 flex items-center gap-2 text-xs text-ink-soft/70 transition hover:text-ink">
         <span className="font-medium tracking-wide">👗 OOTD</span>
@@ -387,6 +397,7 @@ function ActivityCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const readOnly = useReadOnly();
   const [showCosts, setShowCosts] = useState(false);
   // Plans shown expanded; the plan in use starts open, the others folded to one line.
   const [openPlans, setOpenPlans] = useState<Set<number>>(() => new Set([a.planIndex]));
@@ -443,6 +454,7 @@ function ActivityCard({
           <input
             type="checkbox"
             checked={a.visited}
+            disabled={readOnly}
             onChange={(e) => onChange({ ...a, visited: e.target.checked })}
             aria-label={`ไปแล้ว: ${title}`}
             className="h-5 w-5 cursor-pointer accent-done-ink"
@@ -533,7 +545,7 @@ function ActivityCard({
                         </button>
                         {active ? (
                           <span className="shrink-0 rounded-full bg-baby px-2 py-0.5 font-medium text-baby-ink">✓ ใช้แผนนี้</span>
-                        ) : (
+                        ) : readOnly ? null : (
                           <button
                             onClick={() => {
                               onChange({ ...a, planIndex: i });
@@ -552,7 +564,7 @@ function ActivityCard({
                           subtasks={place.subtasks}
                           onChange={(subtasks) => onChange(updatePlace(a, i, (p) => ({ ...p, subtasks })))}
                         />
-                        <BookingInfo title={place.title} booking={place.booking} members={members} start={start} onToggleBooked={() => toggleBooked(i)} />
+                        <BookingInfo title={place.title} booking={place.booking} members={members} start={start} onToggleBooked={readOnly ? undefined : () => toggleBooked(i)} />
                       </div>
                     </div>
                   );
@@ -566,7 +578,7 @@ function ActivityCard({
                   subtasks={a.subtasks}
                   onChange={(subtasks) => onChange(updatePlace(a, 0, (p) => ({ ...p, subtasks })))}
                 />
-                <BookingInfo title={a.title} booking={a.booking} members={members} start={start} onToggleBooked={() => toggleBooked(0)} />
+                <BookingInfo title={a.title} booking={a.booking} members={members} start={start} onToggleBooked={readOnly ? undefined : () => toggleBooked(0)} />
               </div>
             )}
           </div>

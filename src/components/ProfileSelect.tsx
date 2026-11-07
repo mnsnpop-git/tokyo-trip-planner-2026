@@ -2,18 +2,27 @@
 
 import { useEffect, useState } from "react";
 import type { Member } from "@/lib/trip";
+import { checkPin } from "@/lib/pin";
 import { CheckIcon } from "./Icons";
+import { PinPad } from "./PinPad";
+
+/** The view-only visitor; not a trip member. */
+export const GUEST: Member = { id: "guest", name: "Guest", emoji: "👀" };
 
 /** Profile chip in the header; tapping it opens a small menu to switch profile in place. */
 export function ProfileSwitcher({
   me,
   members,
   onSelect,
+  onGuest,
   onSignOut,
 }: {
   me: Member;
   members: Member[];
+  /** Ask for this member's PIN, then switch to them. */
   onSelect: (id: string) => void;
+  /** Switch to view-only guest mode. */
+  onGuest: () => void;
   /** Leave the planner and go back to the "who's planning?" screen. */
   onSignOut: () => void;
 }) {
@@ -74,6 +83,27 @@ export function ProfileSwitcher({
                 </li>
               );
             })}
+            <li role="none">
+              <button
+                role="menuitemradio"
+                aria-checked={me.id === GUEST.id}
+                onClick={() => {
+                  setOpen(false);
+                  if (me.id !== GUEST.id) onGuest();
+                }}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm transition ${
+                  me.id === GUEST.id ? "bg-baby font-semibold text-baby-ink" : "hover:bg-surface"
+                }`}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-lg ring-1 ring-line">
+                  {GUEST.emoji}
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                  Guest <span className="text-xs font-normal text-ink-soft">· ดูอย่างเดียว</span>
+                </span>
+                {me.id === GUEST.id && <CheckIcon className="h-4 w-4 shrink-0" />}
+              </button>
+            </li>
             <li role="separator" className="my-1 border-t border-line" />
             <li role="none">
               <button
@@ -104,15 +134,19 @@ export function ProfileSelect({
   tripYear,
   members,
   onSelect,
+  onGuest,
   onRestoreDefaults,
 }: {
   tripName: string;
   /** e.g. "2026", same as the header label "2026 Trip". */
   tripYear: string;
   members: Member[];
-  onSelect: (id: string) => void;
+  /** Called once the member's PIN was entered correctly. */
+  onSelect: (id: string, pin: string) => void;
+  onGuest: () => void;
   onRestoreDefaults: () => void;
 }) {
+  const [asking, setAsking] = useState<Member | null>(null);
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-baby/70 via-white to-white px-4 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(3rem,env(safe-area-inset-top))]">
       <div aria-hidden className="pointer-events-none absolute inset-0 select-none text-baby-ink/15">
@@ -129,11 +163,11 @@ export function ProfileSelect({
         <p className="mt-2 text-sm text-ink-soft">เลือกโปรไฟล์เพื่อเข้าสู่แพลนทริป</p>
 
         {members.length > 0 ? (
-          <ul className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
+          <ul className="mt-10 flex flex-wrap justify-center gap-4 sm:gap-6">
             {members.map((m) => (
-              <li key={m.id}>
+              <li key={m.id} className="w-[calc(50%-0.5rem)] max-w-36 sm:w-36">
                 <button
-                  onClick={() => onSelect(m.id)}
+                  onClick={() => setAsking(m)}
                   className="group flex w-full flex-col items-center gap-3 rounded-3xl p-3 outline-none transition focus-visible:ring-2 focus-visible:ring-baby-ink"
                 >
                   <span className="flex aspect-square w-full max-w-32 items-center justify-center rounded-3xl border-2 border-line bg-white text-5xl shadow-sm transition group-hover:-translate-y-1 group-hover:border-baby-ink group-hover:shadow-md sm:text-6xl">
@@ -153,12 +187,28 @@ export function ProfileSelect({
               onClick={onRestoreDefaults}
               className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white hover:opacity-90"
             >
-              ใช้โปรไฟล์เริ่มต้น 4 คน
+              ใช้โปรไฟล์เริ่มต้น
             </button>
           </div>
         )}
 
-        <p className="mt-10 text-xs text-ink-soft">เพิ่ม/แก้ไข/ลบสมาชิกได้ที่เมนู 👥 Travelers หลังเข้าสู่ระบบ</p>
+        <button
+          onClick={onGuest}
+          className="mt-8 inline-flex items-center gap-2 rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink-soft shadow-sm transition hover:border-baby-ink hover:text-ink"
+        >
+          <span aria-hidden>{GUEST.emoji}</span> เข้าแบบ Guest · ดูอย่างเดียว
+        </button>
+        <p className="mt-6 text-xs text-ink-soft">เพิ่ม/แก้ไขสมาชิก และเปลี่ยน PIN ได้ที่เมนู 👥 Travelers หลังเข้าสู่ระบบ</p>
+        {asking && (
+          <PinPad
+            title={`${asking.emoji} ${asking.name}`}
+            avatar={asking.emoji}
+            subtitle={`ใส่ PIN 4 หลักของ ${asking.name}`}
+            check={(pin) => checkPin(asking, pin)}
+            onSuccess={(pin) => onSelect(asking.id, pin)}
+            onCancel={() => setAsking(null)}
+          />
+        )}
       </div>
     </main>
   );

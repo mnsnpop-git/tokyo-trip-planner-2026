@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { uid, type Member } from "@/lib/trip";
-import { inputClass, labelClass } from "./Modal";
+import { DEFAULT_PIN, checkPin, isPinFormat } from "@/lib/pin";
+import { Modal, inputClass, labelClass } from "./Modal";
 import { IconButton } from "./Icons";
+import { useReadOnly } from "./ReadOnly";
 
 const EMOJI_PRESETS = [
   "🍿", "❄️", "💣", "🧊", "🐼", "🐧", "🐨", "🐸", "🐹", "🦄",
@@ -17,9 +19,15 @@ export function Members({
   usage,
   onSave,
   onDelete,
+  onChangeMyPin,
+  onResetPin,
 }: {
   members: Member[];
   currentMemberId: string;
+  /** Set a new PIN for the signed-in member. */
+  onChangeMyPin: (pin: string) => void;
+  /** Put another member back on the default PIN. */
+  onResetPin: (id: string) => void;
   /** Number of expenses/bookings that reference the member. */
   usage: (id: string) => number;
   onSave: (m: Member) => void;
@@ -28,6 +36,10 @@ export function Members({
   // One row is edited or confirming delete at a time; "new" is the add form.
   const [editing, setEditing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [changingPin, setChangingPin] = useState(false);
+  const [resetting, setResetting] = useState<string | null>(null);
+  const readOnly = useReadOnly();
+  const me = members.find((m) => m.id === currentMemberId);
 
   const nameTaken = (name: string, exceptId?: string) =>
     members.some((m) => m.id !== exceptId && m.name.trim().toLowerCase() === name.trim().toLowerCase());
@@ -108,7 +120,48 @@ export function Members({
                   />
                 </span>
               </div>
-              {blockedReason && <p className="mt-1 pl-[3.25rem] text-[11px] text-ink-soft">{blockedReason}</p>}
+              {blockedReason && !readOnly && <p className="mt-1 pl-[3.25rem] text-[11px] text-ink-soft">{blockedReason}</p>}
+              {/* PINs: only signed-in members see these controls; nobody ever sees the PIN itself. */}
+              {!readOnly && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-[3.25rem] text-[11px]">
+                  <span className="text-ink-soft">{m.pinHash ? "🔒 ตั้ง PIN แล้ว" : "🔓 ใช้ PIN เริ่มต้น"}</span>
+                  {isMe ? (
+                    <button
+                      onClick={() => setChangingPin(true)}
+                      className="rounded-full bg-white px-2.5 py-0.5 font-medium text-baby-ink shadow-sm hover:bg-baby"
+                    >
+                      เปลี่ยน PIN
+                    </button>
+                  ) : (
+                    m.pinHash &&
+                    (resetting === m.id ? (
+                      <span className="flex items-center gap-1.5 text-alert-ink">
+                        รีเซ็ต PIN ของ {m.name}?
+                        <button
+                          onClick={() => {
+                            onResetPin(m.id);
+                            setResetting(null);
+                          }}
+                          className="rounded-full bg-alert-ink px-2.5 py-0.5 font-medium text-white"
+                        >
+                          ยืนยัน
+                        </button>
+                        <button onClick={() => setResetting(null)} className="underline">
+                          ยกเลิก
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setResetting(m.id)}
+                        title="สำหรับคนที่ลืม PIN"
+                        className="rounded-full bg-white px-2.5 py-0.5 font-medium text-ink-soft shadow-sm hover:text-alert-ink"
+                      >
+                        ↺ รีเซ็ต PIN
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
               {deleting === m.id && (
                 <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-alert/40 p-2.5 text-xs text-alert-ink">
                   ลบ {m.emoji} {m.name} ออกจากทริป?
@@ -131,6 +184,17 @@ export function Members({
           );
         })}
       </ul>
+
+      {changingPin && me && (
+        <ChangePinForm
+          member={me}
+          onCancel={() => setChangingPin(false)}
+          onSave={(pin) => {
+            onChangeMyPin(pin);
+            setChangingPin(false);
+          }}
+        />
+      )}
 
       {editing === "new" && (
         <div className="mt-3">
@@ -226,6 +290,8 @@ function MemberEditor({
         </div>
       </div>
 
+      {isNew && <p className="text-[11px] text-ink-soft">🔓 PIN เริ่มต้นคือ {DEFAULT_PIN} — เจ้าของโปรไฟล์เปลี่ยนเองได้หลังเข้าใช้</p>}
+
       {error && <p className="rounded-xl bg-alert/60 px-3 py-1.5 text-xs text-alert-ink">{error}</p>}
 
       <div className="flex justify-end gap-2">
@@ -237,5 +303,69 @@ function MemberEditor({
         </button>
       </div>
     </form>
+  );
+}
+
+/** Change your own PIN: current PIN, then the new one twice. Digits are never shown. */
+function ChangePinForm({ member, onSave, onCancel }: { member: Member; onSave: (pin: string) => void; onCancel: () => void }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [again, setAgain] = useState("");
+  const [error, setError] = useState("");
+  const digits = (v: string) => v.replace(/\D/g, "").slice(0, 4);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkPin(member, current)) return setError("PIN ปัจจุบันไม่ถูกต้อง");
+    if (!isPinFormat(next)) return setError("PIN ใหม่ต้องเป็นตัวเลข 4 หลัก");
+    if (next !== again) return setError("PIN ใหม่ทั้งสองช่องไม่ตรงกัน");
+    if (next === current) return setError("PIN ใหม่ต้องไม่ซ้ำกับ PIN เดิม");
+    onSave(next);
+  };
+
+  const field = (id: string, label: string, value: string, set: (v: string) => void, autoFocus = false) => (
+    <div>
+      <label className={labelClass} htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="password"
+        inputMode="numeric"
+        autoComplete="off"
+        autoFocus={autoFocus}
+        maxLength={4}
+        className={`${inputClass} text-center font-mono tracking-[0.6em]`}
+        value={value}
+        onChange={(e) => {
+          set(digits(e.target.value));
+          setError("");
+        }}
+        placeholder="••••"
+      />
+    </div>
+  );
+
+  return (
+    <Modal title={`เปลี่ยน PIN · ${member.emoji} ${member.name}`} onClose={onCancel}>
+      <form noValidate onSubmit={submit} className="space-y-3">
+        {field("pin-current", "PIN ปัจจุบัน", current, setCurrent, true)}
+        {field("pin-new", "PIN ใหม่ (4 หลัก)", next, setNext)}
+        {field("pin-again", "ยืนยัน PIN ใหม่", again, setAgain)}
+        {error && (
+          <p role="alert" className="rounded-xl bg-alert px-3 py-2 text-sm font-medium text-alert-ink">
+            ⚠️ {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onCancel} className="rounded-full px-4 py-2 text-sm text-ink-soft hover:bg-surface">
+            ยกเลิก
+          </button>
+          <button type="submit" className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white hover:opacity-90">
+            บันทึก PIN
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

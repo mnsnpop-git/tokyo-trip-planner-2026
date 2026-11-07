@@ -1,12 +1,16 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { browser } from "react-dom";
+import { useCloudSync, type SyncStatus } from "@/lib/useCloudSync";
+import { checkPin, pinHashOf } from "@/lib/pin";
+import { ReadOnlyProvider } from "./ReadOnly";
+import { PinPad } from "./PinPad";
 import { Itinerary } from "./Itinerary";
 import { Expenses } from "./Expenses";
 import { Checklist } from "./Checklist";
 import { Categories } from "./Categories";
-import { ProfileSelect, ProfileSwitcher } from "./ProfileSelect";
+import { GUEST, ProfileSelect, ProfileSwitcher } from "./ProfileSelect";
 import { TripSummary } from "./TripSummary";
 import { HamburgerNav, type MenuItem } from "./MainMenu";
 import { Members } from "./Members";
@@ -47,32 +51,70 @@ import {
 
 const STORAGE_KEY = "tokyo-trip-planner:v1";
 
-function loadTrip(): TripData {
+const BACKUP_KEY = "tokyo-trip-planner:backup";
+const list = <T,>(v: unknown, fallback: T[] = []): T[] => (Array.isArray(v) ? (v as T[]) : fallback);
+
+/** Saved data that couldn't be read is copied here first, so the auto-save can never wipe it out. */
+let loadFailed = false;
+
+/** Turn saved trip JSON (from this browser or the server) into a complete, current-format trip. */
+function normalizeTrip(parsedValue: unknown): TripData {
+  const parsed = (parsedValue ?? {}) as Partial<TripData>;
+  const has = (k: keyof TripData) => k in parsed;
+  // A missing or broken list falls back to empty instead of failing the whole load.
+  const trip = {
+    ...SAMPLE_TRIP,
+    ...parsed,
+    days: list<TripData["days"][number]>(parsed.days),
+    activities: list<TripData["activities"][number]>(parsed.activities),
+    expenses: list<TripData["expenses"][number]>(parsed.expenses),
+  };
+  const members = migrateMembers(list(parsed.members, SAMPLE_TRIP.members));
+  return {
+    ...trip,
+    name: typeof trip.name === "string" && trip.name.trim() ? trip.name : DEFAULT_TRIP_NAME,
+    members,
+    checklist: normalizeChecklist(trip.checklist, members),
+    days: sortDays(trip.days.map(normalizeDay)),
+    categories: normalizeCategories(trip.categories),
+    activities: trip.activities.map(normalizeActivity),
+    // Trips saved before the Wishlist existed start with an empty list and the default tags.
+    wishlist: has("wishlist") ? normalizeWishlist(trip.wishlist) : [],
+    wishTags: normalizeWishTags(trip.wishTags),
+    // Saves from before flights/hotels existed start with none (not the sample ones).
+    flights: has("flights") ? normalizeFlights(trip.flights, members) : [],
+    hotels: has("hotels") ? normalizeHotels(trip.hotels, members) : [],
+    // Saves from before "who has paid" ticks existed start with nothing ticked.
+    paidShares: has("paidShares") ? normalizePaidShares(trip.paidShares) : {},
+  };
+}
+
+/** Whether this browser had its own saved trip when the page opened. */
+let hadLocalSave = false;
+
+function backupTrip(raw: string) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    localStorage.setItem(`${BACKUP_KEY}:${Date.now()}`, raw);
+  } catch {
+    // storage full or blocked; nothing more we can do here
+  }
+}
+
+function loadTrip(): TripData {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const trip = { ...SAMPLE_TRIP, ...(JSON.parse(raw) as Partial<TripData>) };
-      const members = migrateMembers(trip.members);
-      return {
-        ...trip,
-        name: typeof trip.name === "string" && trip.name.trim() ? trip.name : DEFAULT_TRIP_NAME,
-        members,
-        checklist: normalizeChecklist(trip.checklist, members),
-        days: sortDays(trip.days.map(normalizeDay)),
-        categories: normalizeCategories(trip.categories),
-        activities: trip.activities.map(normalizeActivity),
-        // Trips saved before the Wishlist existed start with an empty list and the default tags.
-        wishlist: raw.includes('"wishlist"') ? normalizeWishlist(trip.wishlist) : [],
-        wishTags: normalizeWishTags(trip.wishTags),
-        // Saves from before "who has paid" ticks existed start with nothing ticked.
-        // Saves from before flights/hotels existed start with none (not the sample ones).
-        flights: raw.includes('"flights"') ? normalizeFlights(trip.flights, members) : [],
-        hotels: raw.includes('"hotels"') ? normalizeHotels(trip.hotels, members) : [],
-        paidShares: raw.includes('"paidShares"') ? normalizePaidShares(trip.paidShares) : {},
-      };
+      const trip = normalizeTrip(JSON.parse(raw));
+      hadLocalSave = true;
+      return trip;
     }
   } catch {
-    // ignore unreadable storage and fall back to the sample trip
+    // Unreadable save: keep a copy before the sample trip's auto-save replaces it.
+    if (raw) {
+      loadFailed = true;
+      backupTrip(raw);
+    }
   }
   return SAMPLE_TRIP;
 }
@@ -108,24 +150,57 @@ function loadMenuOrder(): View[] {
 }
 
 // The chosen profile is per device, so it lives apart from the shared trip data.
-const PROFILE_KEY = "tokyo-trip-planner:profile";
+const SESSION_KEY = "tokyo-trip-planner:session";
+const OLD_PROFILE_KEY = "tokyo-trip-planner:profile";
 
-function loadProfile(): string | null {
+/**
+ * Who is using this browser: a member (with the PIN they entered, kept so saves can prove it to
+ * the server — `prevPin` covers the save that changes their own PIN) or a view-only guest.
+ */
+type Session = { memberId: string; pin: string; prevPin?: string } | { guest: true };
+
+function loadSession(): Session | null {
   try {
-    return localStorage.getItem(PROFILE_KEY);
+    // Profiles chosen before PINs existed have to enter their PIN once.
+    localStorage.removeItem(OLD_PROFILE_KEY);
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") as Session | null;
+    if (s && ("guest" in s ? s.guest === true : typeof s.memberId === "string" && typeof s.pin === "string")) return s;
   } catch {
-    return null;
+    // unreadable: ask again
   }
+  return null;
 }
 
 export function TripPlanner() {
   use(browser("The trip plan is stored in this browser's localStorage."));
 
-  const [trip, setTrip] = useState<TripData>(loadTrip);
+  const [trip, setTripState] = useState<TripData>(loadTrip);
+  const [session, setSession] = useState<Session | null>(loadSession);
+  // Profile chosen from the header menu, waiting for its PIN.
+  const [switchTo, setSwitchTo] = useState<Member | null>(null);
+  const isGuest = !!session && "guest" in session;
+  // Guests can't change anything: every trip update is dropped here, whatever control triggered it.
+  const readOnlyRef = useRef(isGuest);
+  useEffect(() => {
+    readOnlyRef.current = isGuest;
+  }, [isGuest]);
+  const setTrip = useCallback<typeof setTripState>((update) => {
+    if (!readOnlyRef.current) setTripState(update);
+  }, []);
   const [selectedDay, setSelectedDay] = useState<string>("all");
   const [confirmReset, setConfirmReset] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
-  const [profileId, setProfileId] = useState<string | null>(loadProfile);
+  // Read once on mount: whether the saved trip couldn't be loaded (and was backed up).
+  const [loadError, setLoadError] = useState(() => loadFailed);
+  const sync = useCloudSync({
+    trip,
+    setTrip: setTripState, // the server's copy always applies, guests included
+    auth: session && !("guest" in session) ? session : null,
+    readOnly: isGuest,
+    parse: normalizeTrip,
+    hadLocalSave,
+    backupLocal: (t) => backupTrip(JSON.stringify(t)),
+  });
   const [view, setView] = useState<View>("plan");
   const [menuOrder, setMenuOrder] = useState<View[]>(loadMenuOrder);
 
@@ -159,15 +234,42 @@ export function TripPlanner() {
     }
   };
 
-  const selectProfile = (id: string | null) => {
-    setProfileId(id);
+  const saveSession = (s: Session | null) => {
+    setSession(s);
     try {
-      if (id) localStorage.setItem(PROFILE_KEY, id);
-      else localStorage.removeItem(PROFILE_KEY);
+      if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+      else localStorage.removeItem(SESSION_KEY);
     } catch {
       // storage blocked; the choice still holds for this session
     }
   };
+  const signIn = (memberId: string, pin: string) => saveSession({ memberId, pin });
+  const signOut = () => {
+    saveSession(null);
+    setView("plan");
+    window.scrollTo({ top: 0 });
+  };
+
+  /** Change the signed-in member's own PIN (the old one stays valid for the save that carries it). */
+  const changeMyPin = (newPin: string) => {
+    if (!session || "guest" in session) return;
+    setTrip((t) => ({
+      ...t,
+      members: t.members.map((m) => (m.id === session.memberId ? { ...m, pinHash: pinHashOf(m.id, newPin) } : m)),
+    }));
+    saveSession({ memberId: session.memberId, pin: newPin, prevPin: session.pin });
+  };
+  /** Put a member back on the default PIN (when they forgot theirs). */
+  const resetPin = (memberId: string) =>
+    setTrip((t) => ({
+      ...t,
+      members: t.members.map((m) => {
+        if (m.id !== memberId) return m;
+        const rest = { ...m };
+        delete rest.pinHash;
+        return rest;
+      }),
+    }));
 
   const saveActivity = (a: Activity) =>
     setTrip((t) => ({
@@ -251,7 +353,9 @@ export function TripPlanner() {
     setSelectedDay(day.id);
   };
 
-  const me = trip.members.find((m) => m.id === profileId);
+  // A member session only counts while its PIN still matches (it may have been changed elsewhere).
+  const member = session && !("guest" in session) ? trip.members.find((m) => m.id === session.memberId) : undefined;
+  const me = isGuest ? GUEST : member && session && !("guest" in session) && checkPin(member, session.pin) ? member : undefined;
   // Year of the first trip day, e.g. "2026 Trip"; follows the dates if they change.
   const tripYear = trip.days[0]?.date.slice(0, 4) || String(new Date().getFullYear());
   if (!me) {
@@ -260,7 +364,8 @@ export function TripPlanner() {
         tripName={trip.name}
         tripYear={tripYear}
         members={trip.members}
-        onSelect={selectProfile}
+        onSelect={signIn}
+        onGuest={() => saveSession({ guest: true })}
         onRestoreDefaults={() => patch({ members: DEFAULT_MEMBERS })}
       />
     );
@@ -268,7 +373,26 @@ export function TripPlanner() {
 
 
   return (
+    <ReadOnlyProvider value={isGuest}>
     <div className="min-h-dvh">
+      {switchTo && (
+        <PinPad
+          title={`${switchTo.emoji} ${switchTo.name}`}
+          avatar={switchTo.emoji}
+          subtitle={`ใส่ PIN 4 หลักของ ${switchTo.name}`}
+          check={(pin) => checkPin(switchTo, pin)}
+          onSuccess={(pin) => {
+            signIn(switchTo.id, pin);
+            setSwitchTo(null);
+          }}
+          onCancel={() => setSwitchTo(null)}
+        />
+      )}
+      {isGuest && (
+        <p className="bg-ink px-4 py-1.5 text-center text-xs font-medium text-white">
+          👀 Guest Mode · ดูอย่างเดียว — เข้าโปรไฟล์ด้วย PIN เพื่อแก้ไข
+        </p>
+      )}
       {/* Header + hamburger stay frozen at the top while the page scrolls. */}
       <div className="sticky top-0 z-40 shadow-[0_1px_8px_rgba(17,20,24,0.06)]">
       <header className="relative border-b border-line bg-white bg-gradient-to-b from-baby/70 via-white to-white">
@@ -280,16 +404,19 @@ export function TripPlanner() {
         </div>
         <div className="relative mx-auto max-w-6xl px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6 sm:pb-4 sm:pt-5">
           <div className="flex items-center justify-between gap-3">
-            <p className="font-sans text-sm font-medium tracking-[0.2em] text-baby-ink">{tripYear} Trip</p>
+            <div className="min-w-0">
+              <p className="font-sans text-sm font-medium tracking-[0.2em] text-baby-ink">{tripYear} Trip</p>
+              <SyncBadge status={sync.status} updatedAt={sync.updatedAt} guest={isGuest} />
+            </div>
             <ProfileSwitcher
               me={me}
               members={trip.members}
-              onSelect={selectProfile}
-              onSignOut={() => {
-                selectProfile(null);
-                setView("plan");
-                window.scrollTo({ top: 0 });
+              onSelect={(id) => {
+                const m = trip.members.find((x) => x.id === id);
+                if (m) setSwitchTo(m);
               }}
+              onGuest={() => saveSession({ guest: true })}
+              onSignOut={signOut}
             />
           </div>
           <TripName name={trip.name} onChange={(name) => patch({ name })} />
@@ -320,6 +447,28 @@ export function TripPlanner() {
             <IconButton icon="add" label="เพิ่มวัน" onClick={addDay} className="self-center" />
           </div>
         </nav>
+      )}
+
+      {sync.replaced && !isGuest && (
+        <div role="status" className="mx-auto mt-4 flex max-w-6xl flex-wrap items-center gap-2 rounded-2xl bg-baby px-4 py-2 text-sm text-baby-ink sm:mx-6 lg:mx-auto">
+          <p className="min-w-0 flex-1">☁️ เปิดข้อมูลล่าสุดที่ทุกคนใช้ร่วมกันแล้ว — ข้อมูลเดิมในเครื่องนี้สำรองไว้</p>
+          <button
+            onClick={sync.restoreReplaced}
+            className="rounded-full bg-white px-3 py-1 text-xs font-medium text-baby-ink shadow-sm hover:bg-white/80"
+          >
+            ใช้ข้อมูลในเครื่องนี้แทน
+          </button>
+          <IconButton icon="close" size="sm" label="ปิดข้อความ" onClick={sync.dismissReplaced} />
+        </div>
+      )}
+
+      {loadError && (
+        <div role="alert" className="mx-auto mt-4 flex max-w-6xl items-start gap-2 rounded-2xl bg-alert/60 px-4 py-2 text-sm text-alert-ink sm:mx-6 lg:mx-auto">
+          <p className="flex-1">
+            ⚠️ อ่านข้อมูลที่บันทึกไว้ไม่ได้ เลยเปิดทริปตัวอย่างแทน — ข้อมูลเดิมถูกสำรองไว้ในเบราว์เซอร์แล้ว (ไม่ได้หาย)
+          </p>
+          <IconButton icon="close" size="sm" label="ปิดข้อความ" onClick={() => setLoadError(false)} />
+        </div>
       )}
 
       {saveFailed && (
@@ -404,6 +553,8 @@ export function TripPlanner() {
             usage={(id) => memberUsage(trip, id)}
             onSave={saveMember}
             onDelete={deleteMember}
+            onChangeMyPin={changeMyPin}
+            onResetPin={resetPin}
           />
         )}
         {view === "categories" && (
@@ -421,8 +572,9 @@ export function TripPlanner() {
             onChange={(checklist) => patch({ checklist })} />}
       </main>
 
+      {!isGuest && (
       <footer className="mx-auto max-w-6xl px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] text-center text-xs text-ink-soft sm:px-6">
-        ข้อมูลบันทึกอัตโนมัติในเบราว์เซอร์นี้ ·{" "}
+        {sync.status === "local" ? "ข้อมูลบันทึกอัตโนมัติในเบราว์เซอร์นี้" : "ข้อมูลบันทึกอัตโนมัติ และทุกคนเห็นข้อมูลเดียวกัน"} ·{" "}
         {confirmReset ? (
           <>
             <button
@@ -433,7 +585,7 @@ export function TripPlanner() {
               }}
               className="font-medium text-alert-ink underline"
             >
-              ยืนยันล้างและโหลดข้อมูลตัวอย่าง
+              {sync.status === "local" ? "ยืนยันล้างและโหลดข้อมูลตัวอย่าง" : "ยืนยันล้างข้อมูลของทุกคน และโหลดข้อมูลตัวอย่าง"}
             </button>{" "}
             <button onClick={() => setConfirmReset(false)} className="underline">ยกเลิก</button>
           </>
@@ -443,7 +595,9 @@ export function TripPlanner() {
           </button>
         )}
       </footer>
+      )}
     </div>
+    </ReadOnlyProvider>
   );
 }
 
@@ -517,5 +671,34 @@ function TripName({ name, onChange }: { name: string; onChange: (name: string) =
       </h1>
       <IconButton icon="edit" label="แก้ไขชื่อทริป" onClick={start} />
     </div>
+  );
+}
+
+const SYNC_TEXT: Record<SyncStatus, string> = {
+  connecting: "⏳ กำลังโหลดข้อมูลล่าสุด…",
+  local: "💾 บันทึกเฉพาะเครื่องนี้",
+  synced: "☁️ ซิงก์แล้ว",
+  saving: "⏳ กำลังบันทึก…",
+  offline: "⚠️ ออฟไลน์ — จะซิงก์ให้เมื่อต่อเน็ตได้",
+  tooLarge: "⚠️ ข้อมูลใหญ่เกิน (รูปเยอะ) — ซิงก์ไม่ได้",
+  denied: "⚠️ บันทึกไม่ได้: PIN ไม่ถูกต้อง — ออกจากระบบแล้วเข้าใหม่",
+};
+
+/** Small line under "2026 Trip" showing whether changes reached the shared copy. */
+function SyncBadge({ status, updatedAt, guest }: { status: SyncStatus; updatedAt: string | null; guest: boolean }) {
+  const time =
+    status === "synced" && updatedAt
+      ? ` · ${new Date(updatedAt).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+      : "";
+  const warn = status === "offline" || status === "tooLarge" || status === "denied";
+  return (
+    <p
+      aria-live="polite"
+      title={status === "local" ? "ยังไม่ได้เชื่อมฐานข้อมูล — ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น" : undefined}
+      className={`truncate text-[11px] ${warn ? "font-medium text-alert-ink" : "text-ink-soft"}`}
+    >
+      {guest && status === "synced" ? "👀 ดูอย่างเดียว · อัปเดตอัตโนมัติ" : SYNC_TEXT[status]}
+      {time}
+    </p>
   );
 }
