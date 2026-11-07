@@ -188,7 +188,6 @@ export function TripPlanner() {
     if (!readOnlyRef.current) setTripState(update);
   }, []);
   const [selectedDay, setSelectedDay] = useState<string>("all");
-  const [confirmReset, setConfirmReset] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   // Read once on mount: whether the saved trip couldn't be loaded (and was backed up).
   const [loadError, setLoadError] = useState(() => loadFailed);
@@ -348,7 +347,7 @@ export function TripPlanner() {
 
   const addDay = () => {
     const last = trip.days[trip.days.length - 1];
-    const day = { id: uid(), date: last ? addDays(last.date, 1) : "2026-12-12", title: "วันใหม่ · ยังไม่ได้ตั้งชื่อ", ootd: EMPTY_OOTD };
+    const day = { id: uid(), date: last ? addDays(last.date, 1) : new Date().toLocaleDateString("sv-SE") /* today, YYYY-MM-DD */, title: "วันใหม่ · ยังไม่ได้ตั้งชื่อ", ootd: EMPTY_OOTD };
     patch({ days: [...trip.days, day] });
     setSelectedDay(day.id);
   };
@@ -465,7 +464,7 @@ export function TripPlanner() {
       {loadError && (
         <div role="alert" className="mx-auto mt-4 flex max-w-6xl items-start gap-2 rounded-2xl bg-alert/60 px-4 py-2 text-sm text-alert-ink sm:mx-6 lg:mx-auto">
           <p className="flex-1">
-            ⚠️ อ่านข้อมูลที่บันทึกไว้ไม่ได้ เลยเปิดทริปตัวอย่างแทน — ข้อมูลเดิมถูกสำรองไว้ในเบราว์เซอร์แล้ว (ไม่ได้หาย)
+            ⚠️ อ่านข้อมูลที่บันทึกไว้ไม่ได้ เลยเปิดทริปว่างแทน — ข้อมูลเดิมถูกสำรองไว้ในเบราว์เซอร์แล้ว (ไม่ได้หาย)
           </p>
           <IconButton icon="close" size="sm" label="ปิดข้อความ" onClick={() => setLoadError(false)} />
         </div>
@@ -574,26 +573,7 @@ export function TripPlanner() {
 
       {!isGuest && (
       <footer className="mx-auto max-w-6xl px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] text-center text-xs text-ink-soft sm:px-6">
-        ข้อมูลบันทึกอัตโนมัติ ·{" "}
-        {confirmReset ? (
-          <>
-            <button
-              onClick={() => {
-                setTrip(SAMPLE_TRIP);
-                setSelectedDay("all");
-                setConfirmReset(false);
-              }}
-              className="font-medium text-alert-ink underline"
-            >
-              {sync.status === "local" ? "ยืนยันล้างและโหลดข้อมูลตัวอย่าง" : "ยืนยันล้างข้อมูลของทุกคน และโหลดข้อมูลตัวอย่าง"}
-            </button>{" "}
-            <button onClick={() => setConfirmReset(false)} className="underline">ยกเลิก</button>
-          </>
-        ) : (
-          <button onClick={() => setConfirmReset(true)} className="underline hover:text-ink">
-            รีเซ็ตเป็นข้อมูลตัวอย่าง
-          </button>
-        )}
+        ข้อมูลบันทึกอัตโนมัติ
       </footer>
       )}
     </div>

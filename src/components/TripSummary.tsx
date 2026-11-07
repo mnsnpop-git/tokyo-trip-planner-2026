@@ -140,6 +140,11 @@ export function TripSummary({
 
       {groupBy === "day" ? (
         <div className="space-y-4">
+          {days.length === 0 && (
+            <p className="rounded-2xl border-2 border-dashed border-line p-6 text-center text-sm text-ink-soft">
+              ยังไม่มีวันในทริป — กด + ข้างแท็บวันด้านบนเพื่อเพิ่มวันแรก
+            </p>
+          )}
           {days.map((day, i) => {
             const items = ordered.filter((a) => a.dayId === day.id);
             const done = items.filter((a) => a.visited).length;

@@ -1109,123 +1109,28 @@ export function migrateMembers(members: Member[]): Member[] {
   return untouchedSample ? LEGACY_DEFAULT_MEMBERS : members;
 }
 
-// ---------- Sample trip ----------
+// ---------- New trip ----------
 
-const ALL = ["m1", "m2", "m3", "m4"];
-
-export const DEFAULT_TRIP_NAME = "Tokyo with the Gang";
+export const DEFAULT_TRIP_NAME = "Tokyo Trip";
 export const TRIP_NAME_MAX = 60;
 
 /**
- * The sample was written for four people; with a single default profile every reference to the
- * other three becomes that profile, and duplicate ids in lists are dropped.
+ * What a brand-new (or reset) trip starts with: one profile (PIN 0912 until changed) and no
+ * plans, bookings, expenses, flights, hotels, wishlist or checklist items. Category and wishlist
+ * tag options are kept so the add forms have something to choose from.
  */
-function soloSample(trip: TripData): TripData {
-  const ids = new Set(["m2", "m3", "m4"]);
-  const fix = (v: unknown): unknown => {
-    if (typeof v === "string") return ids.has(v) ? "m1" : v;
-    if (Array.isArray(v)) {
-      const out = v.map(fix);
-      return out.every((x) => typeof x === "string") ? [...new Set(out)] : out;
-    }
-    if (v && typeof v === "object") {
-      return Object.fromEntries(Object.entries(v).map(([k, x]) => [ids.has(k) ? "m1" : k, fix(x)]));
-    }
-    return v;
-  };
-  return { ...(fix(trip) as TripData), members: DEFAULT_MEMBERS, paidShares: {} };
-}
-
-export const SAMPLE_TRIP: TripData = soloSample({
+export const SAMPLE_TRIP: TripData = {
   name: DEFAULT_TRIP_NAME,
   thbPerJpy: 0.22,
   categories: DEFAULT_CATEGORIES,
-  members: LEGACY_DEFAULT_MEMBERS,
-  days: [
-    { id: "d1", date: "2026-12-12", title: "ถึงโตเกียว · Asakusa", ootd: { theme: "Winter Layering · โทนขาว-ฟ้า", images: [] } },
-    { id: "d2", date: "2026-12-13", title: "Harajuku · Shibuya", ootd: { theme: "Street Style · ดำ-เทา", images: [] } },
-    { id: "d3", date: "2026-12-14", title: "ขับรถเที่ยวฟูจิ · Kawaguchiko", ootd: { theme: "Cozy Outdoor · โค้ทยาว + บูท", images: [] } },
-  ],
-  activities: ([
-    // Day 1
-    { id: "a1", dayId: "d1", slot: "morning", time: "08:30", title: "Narita Express → Tokyo Station", category: "transport", note: "ซื้อตั๋ว N'EX ไป-กลับ ถูกกว่า", mapUrl: mapsSearchUrl("Narita Airport Terminal 1 Station") },
-    { id: "a2", subtasks: [
-      { id: "s1", title: "ประตูคามินาริมง (Kaminarimon)", note: "ถ่ายรูปกับโคมแดงยักษ์", images: [], priority: "must", done: false },
-      { id: "s2", title: "เสี่ยงเซียมซี (Omikuji)", note: "100 เยน ถ้าได้ใบร้ายให้ผูกไว้ที่วัด", images: [], priority: "nice", done: false },
-      { id: "s3", title: "เจดีย์ 5 ชั้น", note: "", images: [], priority: "nice", done: false },
-    ], dayId: "d1", slot: "morning", time: "11:00", title: "วัดเซ็นโซจิ (Senso-ji)", category: "sightseeing", note: "ถ่ายรูปหน้าประตูคามินาริมง 🏮", mapUrl: mapsSearchUrl("Senso-ji Temple Asakusa"), guidelines: ["ล้างมือที่โชซุยะก่อนไหว้", "เสี่ยงเซียมซีโอมิคุจิ 100 เยน", "ไหว้ควันธูปที่กระถางหน้าวิหาร"] },
-    { id: "a3", dayId: "d1", slot: "afternoon", time: "12:30", title: "ของกินถนนนากามิเซะ", category: "food", note: "เมนจิคัตสึ + ขนมนิงเกียวยากิ", mapUrl: mapsSearchUrl("Nakamise Shopping Street") },
-    { id: "a4", dayId: "d1", slot: "afternoon", time: "15:30", title: "Tokyo Skytree", category: "photo", note: "ขึ้นจุดชมวิวตอนพระอาทิตย์ตก", mapUrl: mapsSearchUrl("Tokyo Skytree"), guidelines: ["ขึ้น Tembo Galleria ชั้น 450", "ถ่ายรูปพื้นกระจกชั้น 340"], backups: [{ title: "Tokyo Tower", note: "ถ้าคิว Skytree ยาวเกินไป", mapUrl: mapsSearchUrl("Tokyo Tower"), images: [], guidelines: ["ถ่ายรูปจากสวน Shiba Park"] }, { title: "Roppongi Hills Tokyo City View", note: "วิวเห็นทั้ง Tokyo Tower และ Skytree ในรูปเดียว", mapUrl: mapsSearchUrl("Tokyo City View Roppongi Hills"), images: [], guidelines: ["ซื้อตั๋วรวม Sky Deck ดาดฟ้าเปิดโล่ง"] }], booking: { kind: "anytime", booked: false, method: "ซื้อตั๋วออนไลน์ล่วงหน้า ถูกกว่าซื้อหน้างาน และไม่ต้องต่อคิว", url: "https://www.tokyo-skytree.jp/en/", details: "", bookedBy: "", payment: { required: true, amount: 3100, priceType: "perPerson", currency: "JPY", paidBy: "m1", splitAmong: ALL, date: "2026-12-01" } } },
-    { id: "a5", dayId: "d1", slot: "evening", time: "18:30", title: "ซูชิมื้อเย็นที่ Tsukiji", category: "food", note: "", mapUrl: mapsSearchUrl("Tsukiji Outer Market") },
-    { id: "a6", dayId: "d1", slot: "night", time: "20:30", title: "เดินเล่นริมแม่น้ำสุมิดะ", category: "photo", note: "วิว Skytree เปิดไฟสีฤดูหนาว ✨", mapUrl: mapsSearchUrl("Sumida Park") },
-    // Day 2
-    { id: "a7", dayId: "d2", slot: "morning", time: "09:00", title: "ศาลเจ้าเมจิ (Meiji Jingu)", category: "sightseeing", note: "เขียนป้ายเอมะขอพร", mapUrl: mapsSearchUrl("Meiji Jingu") },
-    { id: "a8", dayId: "d2", slot: "morning", time: "11:00", title: "Takeshita Street", category: "shopping", note: "เครปสายรุ้ง 🌈", mapUrl: mapsSearchUrl("Takeshita Street Harajuku") },
-    { id: "a9", dayId: "d2", slot: "afternoon", time: "13:30", title: "Harajuku Gyoza Lou", category: "food", note: "คิวยาว ไปก่อนเที่ยงครึ่ง", mapUrl: mapsSearchUrl("Harajuku Gyoza Lou"), booking: { kind: "walkin", method: "ไม่รับจอง ต่อคิวหน้าร้าน ได้บัตรคิวแล้วเดินเล่นรอได้" } },
-    { id: "a10", dayId: "d2", slot: "afternoon", time: "15:00", title: "Shibuya Parco / Nintendo Tokyo", category: "shopping", note: "", mapUrl: mapsSearchUrl("Shibuya Parco") },
-    { id: "a11", dayId: "d2", slot: "evening", time: "17:30", title: "Shibuya Sky", category: "photo", note: "จองตั๋วล่วงหน้า 4 สัปดาห์!", mapUrl: mapsSearchUrl("Shibuya Sky"), guidelines: ["ถ่ายรูปมุม Sky Edge ตอนพระอาทิตย์ตก", "ฝากของในล็อกเกอร์ก่อนขึ้นดาดฟ้า"], backups: [{ title: "Shibuya Scramble Crossing จาก Starbucks Tsutaya", note: "ถ้าจองตั๋วไม่ทัน / ฝนตก", mapUrl: mapsSearchUrl("Starbucks Shibuya Tsutaya"), images: [], guidelines: [] }], booking: { kind: "window", windowAmount: 28, windowUnit: "days", booked: true, method: "จองบนเว็บ Shibuya Sky เปิดขายล่วงหน้า 4 สัปดาห์ เลือกรอบก่อนพระอาทิตย์ตก", url: "https://www.shibuya-scramble-square.com/sky/", details: "รอบ 17:20 · 3 คน · เลขยืนยัน SKY-482913 (QR อยู่ในอีเมลแพร)", bookedBy: "m3", payment: { required: true, amount: 2500, priceType: "perPerson", currency: "JPY", paidBy: "m3", splitAmong: ["m1", "m2", "m3"], date: "2026-11-15" } } },
-    { id: "a12", dayId: "d2", slot: "night", time: "20:00", title: "อิซากายะ Nonbei Yokocho", category: "food", note: "ยากิโทริ + ไฮบอล 🍻", mapUrl: mapsSearchUrl("Nonbei Yokocho Shibuya") },
-    // Day 3
-    { id: "a13", dayId: "d3", slot: "morning", time: "07:30", title: "รับรถเช่า → ขับไป Kawaguchiko", category: "transport", note: "ใช้ใบขับขี่สากล + ETC card", mapUrl: mapsSearchUrl("Toyota Rent a Car Shinjuku") },
-    { id: "a14", dayId: "d3", slot: "morning", time: "10:30", title: "Chureito Pagoda", category: "photo", note: "บันได 398 ขั้น วิวฟูจิ 🗻", mapUrl: mapsSearchUrl("Chureito Pagoda"), guidelines: ["ถ่ายรูปเจดีย์ห้าชั้นคู่ฟูจิจากจุดชมวิวด้านบน", "มาก่อน 9 โมง คนน้อยและฟ้าใส"], backups: [{ title: "Kawaguchiko Music Forest", note: "ถ้าเมฆบังฟูจิ", mapUrl: mapsSearchUrl("Kawaguchiko Music Forest Museum"), images: [], guidelines: [] }] },
-    { id: "a15", dayId: "d3", slot: "afternoon", time: "13:00", title: "Hoto Fudou", category: "food", note: "อุด้งหม้อร้อน เหมาะกับหน้าหนาว", mapUrl: mapsSearchUrl("Hoto Fudou Kawaguchiko") },
-    { id: "a16", dayId: "d3", slot: "afternoon", time: "15:00", title: "Oishi Park", category: "sightseeing", note: "", mapUrl: mapsSearchUrl("Oishi Park Fujikawaguchiko") },
-    { id: "a17", dayId: "d3", slot: "evening", time: "18:00", title: "ขับรถกลับโตเกียว + คืนรถ", category: "transport", note: "", mapUrl: "" },
-    { id: "a18", dayId: "d3", slot: "night", time: "21:00", title: "Don Quijote Shinjuku", category: "shopping", note: "ช้อปของฝาก tax-free", mapUrl: mapsSearchUrl("Don Quijote Shinjuku") },
-  ] satisfies Parameters<typeof normalizeActivity>[0][]).map(normalizeActivity),
-  expenses: [
-    { id: "e2", title: "Narita Express x4", amount: 12280, currency: "JPY", paidBy: "m2", splitAmong: ALL },
-    { id: "e3", title: "eSIM 4 คน", amount: 1200, currency: "THB", paidBy: "m3", splitAmong: ALL },
-    { id: "e4", title: "ซูชิ Tsukiji", amount: 18400, currency: "JPY", paidBy: "m2", splitAmong: ALL },
-    { id: "e6", title: "เช่ารถ + น้ำมัน + ทางด่วน", amount: 28000, currency: "JPY", paidBy: "m4", splitAmong: ALL },
-  ],
+  members: DEFAULT_MEMBERS,
+  days: [],
+  activities: [],
+  expenses: [],
+  checklist: [],
+  wishlist: [],
   wishTags: DEFAULT_WISH_TAGS,
-  flights: [
-    {
-      id: "f1", direction: "outbound", airline: "TG", airlineName: "Thai Airways", flightNo: "TG 676",
-      from: "BKK", to: "NRT", departDate: "2026-12-11", departTime: "23:55", arriveDate: "2026-12-12", arriveTime: "07:50",
-      returnLeg: { flightNo: "TG 677", from: "NRT", to: "BKK", departDate: "2026-12-15", departTime: "10:30", arriveDate: "2026-12-15", arriveTime: "15:30" },
-      bookingRef: "", booked: true, note: "โหลดกระเป๋า 30 kg", passengers: ALL, packageHotelIds: [],
-      cost: { amount: 22400, priceType: "perPerson", currency: "THB", selfPaid: true, paidBy: "" },
-    },
-  ],
-  hotels: [
-    {
-      id: "h1", name: "Airbnb Asakusa", address: "Asakusa, Taito City, Tokyo", mapUrl: "", url: "",
-      checkIn: "2026-12-12", checkOut: "2026-12-15", checkInTime: "15:00", checkOutTime: "10:00",
-      bookingRef: "", booked: true, note: "ฝากกระเป๋าก่อนเช็กอินได้", guests: ALL,
-      cost: { amount: 32000, priceType: "perNight", currency: "JPY", selfPaid: false, paidBy: "m1" },
-    },
-  ],
-  paidShares: { "booking-a11": ["m1"] }, // Pop already paid Bom back for Shibuya Sky
-  wishlist: [
-    { ...EMPTY_WISH, id: "w1", name: "Tokyo Banana", level: 3, tags: ["food", "souvenir"], wantedBy: ALL, note: "ซื้อที่สนามบินขากลับได้" },
-    { ...EMPTY_WISH, id: "w2", name: "KitKat รสมัทฉะ", level: 2, tags: ["food", "souvenir"], wantedBy: ["m1", "m3"], activityId: "a18" },
-    { ...EMPTY_WISH, id: "w3", name: "กันแดด Anessa", level: 3, tags: ["cosmetics"], wantedBy: ["m1", "m3"], activityId: "a18", gotBy: { m1: "m3", m3: "m3" }, price: 2480 },
-    { ...EMPTY_WISH, id: "w4", name: "Heattech Ultra Warm", level: 2, tags: ["clothes"], wantedBy: ["m2", "m4"], note: "ไซส์ L ทั้งคู่" },
-    { ...EMPTY_WISH, id: "w5", name: "ต่างหูจาก Takeshita", level: 1, tags: ["jewelry"], wantedBy: ["m1"], activityId: "a8" },
-  ],
-  checklist: normalizeChecklist(
-    [
-      { id: "c1", label: "🛂 Passport (อายุเหลือ > 6 เดือน)", doneBy: ["m1", "m2", "m3", "m4"] },
-      { id: "c2", label: "🎫 JR Pass / บัตร Suica", note: "ซื้อ Suica ใน Apple Wallet ได้", doneBy: ["m2"] },
-      { id: "c3", label: "📶 eSIM ญี่ปุ่น", doneBy: ["m1", "m2", "m3", "m4"] },
-      { id: "c4", label: "🔌 ปลั๊กแปลง Type A", assignees: ["m2", "m3"], doneBy: ["m2", "m3"] },
-      { id: "c5", label: "🪪 ใบขับขี่สากล (IDP)", doneBy: [] },
-      { id: "c6", label: "📱 QR Visit Japan Web", doneBy: [] },
-      { id: "c7", label: "🧥 เสื้อกันหนาว + ฮีทเทค + ถุงมือ", doneBy: [] },
-      { id: "c8", label: "💴 เงินเยนสด", doneBy: ["m1", "m2", "m3", "m4"] },
-      { id: "c9", label: "🔋 Power bank", doneBy: [] },
-      { id: "c10", label: "🩹 ประกันการเดินทาง", doneBy: ["m1", "m2", "m3", "m4"] },
-      {
-        id: "c11",
-        label: "📷 เช่ากล้อง Fuji X100V",
-        note: "รับที่ร้านวันก่อนบิน 1 วัน คืนภายใน 3 วันหลังกลับ",
-        assignees: ["m1"],
-        doneBy: [],
-        cost: { amount: 3600, currency: "THB", splitAmong: ALL, paidBy: "m1", deposit: 1000, fullyPaid: false },
-      },
-    ],
-    LEGACY_DEFAULT_MEMBERS,
-  ),
-});
+  flights: [],
+  hotels: [],
+  paidShares: {},
+};
