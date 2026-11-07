@@ -52,7 +52,10 @@ import {
 const STORAGE_KEY = "tokyo-trip-planner:v1";
 
 const BACKUP_KEY = "tokyo-trip-planner:backup";
-const list = <T,>(v: unknown, fallback: T[] = []): T[] => (Array.isArray(v) ? (v as T[]) : fallback);
+/** The value if it's an array, else the fallback (a broken list in saved data shouldn't fail the load). */
+function list<T>(v: unknown, fallback: T[] = []): T[] {
+  return Array.isArray(v) ? (v as T[]) : fallback;
+}
 
 /** Saved data that couldn't be read is copied here first, so the auto-save can never wipe it out. */
 let loadFailed = false;
