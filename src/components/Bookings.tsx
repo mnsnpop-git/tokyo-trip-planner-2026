@@ -1,5 +1,6 @@
 "use client";
 
+import { useReadOnly } from "./ReadOnly";
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { IconButton } from "./Icons";
@@ -79,6 +80,7 @@ export function Bookings({
   onSave: (a: Activity) => void;
   onOpenDay: (dayId: string) => void;
 }) {
+  const readOnly = useReadOnly();
   const now = useNow();
   const [tab, setTab] = useState<BookingKind | "all">("all");
   const [dayFilter, setDayFilter] = useState("all");
@@ -307,7 +309,7 @@ export function Bookings({
           booking={viewed.place.booking}
           members={members}
           start={viewed.start}
-          onToggleBooked={requiresBooking(viewed.place.booking) ? () => toggleBooked(viewed) : undefined}
+          onToggleBooked={requiresBooking(viewed.place.booking) && !readOnly ? () => toggleBooked(viewed) : undefined}
           onClose={() => setViewing(null)}
         />
       )}
@@ -349,6 +351,7 @@ function BookingRow({
   onEdit: () => void;
   onToggleBooked: () => void;
 }) {
+  const readOnly = useReadOnly();
   const b = e.place.booking;
   const p = b.payment;
   const by = members.find((m) => m.id === b.bookedBy);
@@ -394,7 +397,7 @@ function BookingRow({
             🔗 ไปจอง
           </a>
         )}
-        {requiresBooking(b) && (
+        {requiresBooking(b) && !readOnly && (
           <button
             onClick={onToggleBooked}
             className={`rounded-full px-3.5 py-1.5 font-medium transition ${

@@ -1,5 +1,6 @@
 "use client";
 
+import { useReadOnly } from "./ReadOnly";
 import { useState } from "react";
 import {
   EMPTY_CHECKLIST_COST,
@@ -47,10 +48,17 @@ export function Checklist({
   const isMine = viewing === currentMemberId;
   const isDone = (item: ChecklistItem, id: string) => item.doneBy.includes(id);
   const listOf = (id: string) => items.filter((i) => i.assignees.includes(id));
+  /** Overall progress of an item across everyone who has to prepare it. */
+  const groupStatus = (item: ChecklistItem) => {
+    const done = item.assignees.filter((id) => isDone(item, id)).length;
+    const total = item.assignees.length;
+    return { done, total, state: done === 0 ? "none" : done < total ? "some" : "all" } as const;
+  };
 
   const visible = items
     .filter((i) => !viewed || i.assignees.includes(viewed.id))
     .filter((i) => !hideDone || !(viewed ? isDone(i, viewed.id) : i.assignees.every((id) => isDone(i, id))));
+  const readOnly = useReadOnly();
   const { order, draggingId, start, move } = useDragReorder(
     visible.map((i) => i.id),
     (ids) => onChange(mergeOrder(items, ids)),
@@ -131,13 +139,30 @@ export function Checklist({
 
       {viewed && !isMine && (
         <p className="mb-3 rounded-xl bg-surface px-3 py-2 text-xs text-ink-soft">
-          👀 กำลังดูของ {viewed.emoji} {viewed.name} — ติ๊กแทนเพื่อนไม่ได้
+          👀 กำลังดูของ {viewed.emoji} {viewed.name} — เปลี่ยนสถานะแทนเพื่อนไม่ได้
         </p>
+      )}
+
+      {!viewed && items.length > 0 && (
+        <div className="mb-3 grid grid-cols-3 gap-2 text-center text-xs">
+          {(
+            [
+              ["none", "⏳ ยังไม่ได้เตรียมเลย", "bg-surface text-ink-soft"],
+              ["some", "🟡 เตรียมบางคนแล้ว", "bg-alt text-alt-ink"],
+              ["all", "✅ เตรียมครบทุกคน", "bg-done text-done-ink"],
+            ] as const
+          ).map(([state, label, cls]) => (
+            <div key={state} className={`rounded-xl px-2 py-2 ${cls}`}>
+              <p className="text-lg font-bold leading-none">{items.filter((i) => groupStatus(i).state === state).length}</p>
+              <p className="mt-1 text-[11px] font-medium leading-tight">{label}</p>
+            </div>
+          ))}
+        </div>
       )}
 
       <label className="mb-2 flex w-fit cursor-pointer items-center gap-2 text-xs text-ink-soft">
         <input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} className="h-4 w-4" />
-        ซ่อนที่ทำแล้ว
+        ซ่อนที่เตรียมแล้ว
       </label>
 
       {shown.length === 0 ? (
@@ -151,17 +176,27 @@ export function Checklist({
             const owner = viewed?.id ?? currentMemberId;
             const ownerAssigned = item.assignees.includes(owner);
             const checked = isDone(item, owner);
-            const canTick = owner === currentMemberId && ownerAssigned;
+            const group = groupStatus(item);
+            // The checkbox: only in a person's tab, and only you can tick your own.
+            const canTick = !!viewed && viewed.id === currentMemberId && ownerAssigned && !readOnly;
+            const struck = viewed ? checked && ownerAssigned : group.state === "all";
             const assignees = item.assignees.map((id) => memberById.get(id)).filter((m): m is Member => Boolean(m));
             const c = item.cost;
             return (
               <li
                 key={item.id}
                 data-reorder-id={item.id}
-                className={`flex items-start gap-2 rounded-xl border px-2 py-2 transition ${
-                  draggingId === item.id ? "scale-[1.02] border-baby-ink/40 bg-white shadow-lg" : "border-transparent hover:bg-surface/70"
+                className={`flex items-start gap-2 rounded-2xl border px-2.5 py-2.5 transition ${
+                  draggingId === item.id
+                    ? "scale-[1.02] border-baby-ink/40 bg-white shadow-lg"
+                    : !viewed && group.state === "all"
+                      ? "border-done-ink/25 bg-done/30"
+                      : !viewed && group.state === "some"
+                        ? "border-alt-ink/25 bg-alt/30"
+                        : "border-line/60 bg-white/60 hover:bg-surface/70"
                 }`}
               >
+                {readOnly ? null : (
                 <button
                   onPointerDown={(e) => start(e, item.id)}
                   onKeyDown={(e) => {
@@ -175,45 +210,62 @@ export function Checklist({
                 >
                   ⋮⋮
                 </button>
-                {ownerAssigned ? (
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={!canTick}
-                    onChange={() => toggleMine(item)}
-                    aria-label={`${item.label}: ${checked ? "ทำแล้ว" : "ยังไม่ทำ"}`}
-                    title={canTick ? undefined : "ติ๊กได้เฉพาะของตัวเอง"}
-                    className="mt-0.5 h-5 w-5 shrink-0 accent-done-ink disabled:opacity-60"
-                  />
-                ) : (
-                  <span aria-hidden className="mt-0.5 h-5 w-5 shrink-0" />
                 )}
+                {viewed &&
+                  (ownerAssigned ? (
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!canTick}
+                      onChange={() => toggleMine(item)}
+                      aria-label={`${item.label}: ${checked ? "เตรียมแล้ว" : "ยังไม่เตรียม"}`}
+                      title={canTick ? (checked ? "เตรียมแล้ว" : "ติ๊กเมื่อเตรียมแล้ว") : "เปลี่ยนได้เฉพาะของตัวเอง"}
+                      className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-done-ink disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  ) : (
+                    <span aria-hidden className="mt-0.5 h-5 w-5 shrink-0" />
+                  ))}
 
                 <div className="min-w-0 flex-1">
-                  <p className={`text-sm ${checked && ownerAssigned ? "text-ink-soft line-through" : ""}`}>{item.label}</p>
+                  <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+                    <p className={`min-w-0 flex-1 text-sm font-medium ${struck ? "text-ink-soft line-through" : ""}`}>{item.label}</p>
+                    {!viewed && group.total > 0 && <GroupBadge {...group} />}
+                  </div>
                   {item.note && <p className="mt-0.5 line-clamp-2 text-xs text-ink-soft">{item.note}</p>}
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                    {/* Everyone's status — view only */}
-                    {assignees.map((m) => (
-                      <span
-                        key={m.id}
-                        title={`${m.name}: ${isDone(item, m.id) ? "ทำแล้ว" : "ยังไม่ทำ"}`}
-                        className={`rounded-full px-1.5 py-0.5 ${
-                          isDone(item, m.id) ? "bg-done text-done-ink" : "bg-surface text-ink-soft"
-                        }`}
-                      >
-                        {m.emoji}
-                        {isDone(item, m.id) ? "✓" : "○"}
-                      </span>
-                    ))}
-                    {c && c.amount > 0 && (
+
+                  {/* Who has to prepare it, and whether each has. Only your own name can be tapped. */}
+                  {assignees.length > 0 && (
+                    <div className="mt-2">
+                      <p className="mb-1 text-[11px] text-ink-soft">คนที่ต้องเตรียม</p>
+                      <div className="flex flex-wrap gap-2">
+                        {assignees.map((m) => {
+                          const done = isDone(item, m.id);
+                          return (
+                            <span
+                              key={m.id}
+                              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
+                                done ? "border-done-ink/20 bg-done text-done-ink" : "border-line bg-white text-ink-soft"
+                              } ${viewed?.id === m.id ? "font-semibold ring-2 ring-ink/15" : ""}`}
+                            >
+                              <span aria-hidden>{m.emoji}</span>
+                              <span className={done ? "line-through decoration-2" : ""}>{m.name}</span>
+                              <span className="text-[10px] font-semibold opacity-80">· {done ? "เตรียมแล้ว" : "ยังไม่เตรียม"}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {c && c.amount > 0 && (
+                    <p className="mt-2 text-[11px]">
                       <span className={`rounded-full px-2 py-0.5 font-medium ${c.fullyPaid ? "bg-done text-done-ink" : "bg-alert text-alert-ink"}`}>
                         {c.fullyPaid
                           ? `💴 จ่ายครบ ${money(c.amount, c.currency)}${c.selfPaid ? " · จ่ายกันเอง" : ""}`
                           : `💴 ${money(c.amount, c.currency)} · เหลือ ${money(checklistRemaining(c), c.currency)}`}
                       </span>
-                    )}
-                  </div>
+                    </p>
+                  )}
                 </div>
 
                 <span className="flex shrink-0 items-center gap-0.5">
@@ -226,7 +278,9 @@ export function Checklist({
         </ul>
       )}
 
-      <p className="mt-3 text-[11px] text-ink-soft">⋮⋮ ลากเพื่อจัดลำดับ · ติ๊กได้เฉพาะของตัวเอง ดูของเพื่อนได้</p>
+      {!readOnly && (
+        <p className="mt-3 text-[11px] text-ink-soft">⋮⋮ ลากเพื่อจัดลำดับ · ติ๊กช่องในแท็บของตัวเองเมื่อเตรียมแล้ว · ดูของเพื่อนได้</p>
+      )}
 
       {draft && (
         <ChecklistForm draft={draft} members={members} currentMemberId={currentMemberId} onCancel={() => setDraft(null)} onSubmit={save} />
@@ -464,4 +518,14 @@ function ChecklistForm({
       </form>
     </Modal>
   );
+}
+
+/** Status of an item across everyone assigned: none / some / all prepared. */
+function GroupBadge({ done, total, state }: { done: number; total: number; state: "none" | "some" | "all" }) {
+  const look = {
+    none: { cls: "bg-surface text-ink-soft", text: "⏳ ยังไม่ได้เตรียมเลย" },
+    some: { cls: "bg-alt text-alt-ink", text: `🟡 เตรียมแล้ว ${done}/${total}` },
+    all: { cls: "bg-done text-done-ink", text: "✅ เตรียมครบทุกคน" },
+  }[state];
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${look.cls}`}>{look.text}</span>;
 }

@@ -76,6 +76,8 @@ export interface Member {
   id: string;
   name: string;
   emoji: string;
+  /** Salted hash of the profile PIN (see lib/pin); absent = default PIN. */
+  pinHash?: string;
 }
 
 export interface Day {
@@ -1086,7 +1088,11 @@ export function memberUsage(data: ExpenseSources, id: string): number {
   return inExpenses + inBookings + inWishlist + inChecklist + inTravel;
 }
 
-export const DEFAULT_MEMBERS: Member[] = [
+/** A new trip starts with a single profile; more are added in the Travelers menu. */
+export const DEFAULT_MEMBERS: Member[] = [{ id: "m1", name: "Pop", emoji: "🍿" }];
+
+// The four profiles of earlier versions, still used to rename the even older sample members.
+const LEGACY_DEFAULT_MEMBERS: Member[] = [
   { id: "m1", name: "Pop", emoji: "🍿" },
   { id: "m2", name: "Ice", emoji: "❄️" },
   { id: "m3", name: "Bom", emoji: "💣" },
@@ -1099,8 +1105,8 @@ const LEGACY_SAMPLE_NAMES: Record<string, string> = { m1: "มิ้นท์", 
 /** Rename untouched old sample members to the default profiles; leave anything the user changed alone. */
 export function migrateMembers(members: Member[]): Member[] {
   const untouchedSample =
-    members.length === DEFAULT_MEMBERS.length && members.every((m) => LEGACY_SAMPLE_NAMES[m.id] === m.name);
-  return untouchedSample ? DEFAULT_MEMBERS : members;
+    members.length === LEGACY_DEFAULT_MEMBERS.length && members.every((m) => LEGACY_SAMPLE_NAMES[m.id] === m.name);
+  return untouchedSample ? LEGACY_DEFAULT_MEMBERS : members;
 }
 
 // ---------- Sample trip ----------
@@ -1110,11 +1116,31 @@ const ALL = ["m1", "m2", "m3", "m4"];
 export const DEFAULT_TRIP_NAME = "Tokyo with the Gang";
 export const TRIP_NAME_MAX = 60;
 
-export const SAMPLE_TRIP: TripData = {
+/**
+ * The sample was written for four people; with a single default profile every reference to the
+ * other three becomes that profile, and duplicate ids in lists are dropped.
+ */
+function soloSample(trip: TripData): TripData {
+  const ids = new Set(["m2", "m3", "m4"]);
+  const fix = (v: unknown): unknown => {
+    if (typeof v === "string") return ids.has(v) ? "m1" : v;
+    if (Array.isArray(v)) {
+      const out = v.map(fix);
+      return out.every((x) => typeof x === "string") ? [...new Set(out)] : out;
+    }
+    if (v && typeof v === "object") {
+      return Object.fromEntries(Object.entries(v).map(([k, x]) => [ids.has(k) ? "m1" : k, fix(x)]));
+    }
+    return v;
+  };
+  return { ...(fix(trip) as TripData), members: DEFAULT_MEMBERS, paidShares: {} };
+}
+
+export const SAMPLE_TRIP: TripData = soloSample({
   name: DEFAULT_TRIP_NAME,
   thbPerJpy: 0.22,
   categories: DEFAULT_CATEGORIES,
-  members: DEFAULT_MEMBERS,
+  members: LEGACY_DEFAULT_MEMBERS,
   days: [
     { id: "d1", date: "2026-12-12", title: "ถึงโตเกียว · Asakusa", ootd: { theme: "Winter Layering · โทนขาว-ฟ้า", images: [] } },
     { id: "d2", date: "2026-12-13", title: "Harajuku · Shibuya", ootd: { theme: "Street Style · ดำ-เทา", images: [] } },
@@ -1200,6 +1226,6 @@ export const SAMPLE_TRIP: TripData = {
         cost: { amount: 3600, currency: "THB", splitAmong: ALL, paidBy: "m1", deposit: 1000, fullyPaid: false },
       },
     ],
-    DEFAULT_MEMBERS,
+    LEGACY_DEFAULT_MEMBERS,
   ),
-};
+});

@@ -425,7 +425,8 @@ export function BookingInfo({
   booking: Booking;
   members: Member[];
   start: Date | null;
-  onToggleBooked: () => void;
+  /** Omitted for guests (view only). */
+  onToggleBooked?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const now = useNow();

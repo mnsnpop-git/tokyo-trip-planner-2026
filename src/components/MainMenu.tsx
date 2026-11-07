@@ -1,5 +1,6 @@
 "use client";
 
+import { useReadOnly } from "./ReadOnly";
 import { useEffect, useRef, useState } from "react";
 import { XIcon } from "./Icons";
 
@@ -36,8 +37,10 @@ export function MainMenu<T extends string>({
   const byId = new Map(items.map((i) => [i.id, i]));
   const shown = drag ? drag.order.map((id) => byId.get(id)!) : items;
 
+  const readOnly = useReadOnly();
   const startGesture = (e: React.PointerEvent<HTMLButtonElement>, id: T) => {
-    if (e.button !== 0) return;
+    // Guests can't rearrange the menu either.
+    if (e.button !== 0 || readOnly) return;
     const pointerId = e.pointerId;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -126,7 +129,7 @@ export function MainMenu<T extends string>({
                 onSelect(m.id);
               }}
               onKeyDown={(e) => {
-                if (!e.altKey) return;
+                if (!e.altKey || readOnly) return;
                 if (e.key === "ArrowUp") {
                   e.preventDefault();
                   moveBy(m.id, -1);

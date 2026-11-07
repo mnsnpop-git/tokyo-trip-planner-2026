@@ -1,5 +1,6 @@
 "use client";
 
+import { useReadOnly } from "./ReadOnly";
 import { useState } from "react";
 import {
   activePlace,
@@ -181,6 +182,7 @@ function Overview({
   activityLabel: (id: string) => string;
   onChange: (patch: Partial<TripData>) => void;
 }) {
+  const readOnly = useReadOnly();
   const { members, thbPerJpy } = data;
   const { fmt, other } = unitFormat(unit, thbPerJpy);
   const totalJpy = sumJpy(all, thbPerJpy);
@@ -213,6 +215,7 @@ function Overview({
           step="0.001"
           min="0.001"
           aria-label="บาทต่อ 1 เยน"
+          disabled={readOnly}
           value={thbPerJpy}
           onChange={(e) => {
             const v = Number(e.target.value);
@@ -354,6 +357,7 @@ function ExpenseList({
   activityGroups: ActivityGroup[];
   onChange: (patch: Partial<TripData>) => void;
 }) {
+  const readOnly = useReadOnly();
   const { members, expenses, thbPerJpy } = data;
   const { fmt, other } = unitFormat(unit, thbPerJpy);
   const [person, setPerson] = useState("all");
@@ -503,6 +507,7 @@ function ExpenseList({
                       <button
                         key={id}
                         onClick={() => togglePaid(e, id)}
+                        disabled={readOnly}
                         aria-pressed={done}
                         aria-label={`${m.name} ${done ? "จ่ายแล้ว" : "ยังไม่จ่าย"} — แตะเพื่อเปลี่ยน`}
                         className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition ${
@@ -515,7 +520,7 @@ function ExpenseList({
                   })}
                 </div>
 
-                {isManual ? (
+                {isManual && !readOnly ? (
                   <ActivitySelect
                     groups={activityGroups}
                     value={e.activityId && data.activities.some((a) => a.id === e.activityId) ? e.activityId : ""}

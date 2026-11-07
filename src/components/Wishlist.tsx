@@ -1,5 +1,6 @@
 "use client";
 
+import { useReadOnly } from "./ReadOnly";
 import { useState } from "react";
 import {
   EMPTY_WISH,
@@ -253,6 +254,7 @@ function WishRow({
   const iWant = w.wantedBy.includes(currentMemberId);
   const done = wishDoneFor(w, currentMemberId);
   const gotCount = wanters.filter((m) => hasGot(w, m.id)).length;
+  const readOnly = useReadOnly();
   return (
     <li className={`rounded-2xl border p-3 shadow-sm transition ${done ? "border-done-ink/25 bg-done/30" : "border-line bg-white"}`}>
       <div className="flex items-start gap-3">
@@ -299,6 +301,7 @@ function WishRow({
                   <button
                     key={m.id}
                     onClick={() => onToggleGot(m.id)}
+                    disabled={readOnly}
                     aria-pressed={got}
                     aria-label={`${m.name}: ${got ? "got" : "not yet"}`}
                     className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition ${

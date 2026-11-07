@@ -1,5 +1,6 @@
 "use client";
 
+import { useReadOnly } from "./ReadOnly";
 import { useState } from "react";
 import { SUBTASK_PRIORITIES, uid, type SubTask, type SubTaskPriority } from "@/lib/trip";
 import { Modal, inputClass, labelClass } from "./Modal";
@@ -33,6 +34,7 @@ export function SubTaskList({
   subtasks: SubTask[];
   onChange: (subtasks: SubTask[]) => void;
 }) {
+  const readOnly = useReadOnly();
   const [editing, setEditing] = useState<SubTask | "new" | null>(null);
   const [viewing, setViewing] = useState<{ task: SubTask; index: number } | null>(null);
   const done = subtasks.filter((t) => t.done).length;
@@ -53,7 +55,9 @@ export function SubTaskList({
       </div>
 
       {subtasks.length === 0 ? (
-        <p className="pb-0.5 text-[11px] text-ink-soft">ยังไม่มี — กด + เพื่อเพิ่มจุดที่อยากไป/สิ่งที่อยากทำที่นี่</p>
+        <p className="pb-0.5 text-[11px] text-ink-soft">
+          {readOnly ? "ยังไม่มี" : "ยังไม่มี — กด + เพื่อเพิ่มจุดที่อยากไป/สิ่งที่อยากทำที่นี่"}
+        </p>
       ) : (
         <>
           <Progress done={done} total={subtasks.length} label="ทำแล้ว" className="mb-1 mt-1" />
@@ -62,6 +66,7 @@ export function SubTaskList({
               <li key={t.id} className="flex items-start gap-2 py-1.5">
                 <button
                   onClick={() => toggle(t.id)}
+                  disabled={readOnly}
                   aria-pressed={t.done}
                   aria-label={t.done ? `ยกเลิกว่าทำแล้ว: ${t.title}` : `ทำแล้ว: ${t.title}`}
                   title={t.done ? "Undo" : "Mark as done"}

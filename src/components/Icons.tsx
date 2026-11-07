@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useReadOnly } from "./ReadOnly";
 
 /* Small solid icons on a 20×20 grid, drawn in currentColor. */
 
@@ -81,7 +82,10 @@ export function IconButton({
   disabled?: boolean;
   className?: string;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "type" | "className" | "children">) {
+  const readOnly = useReadOnly();
   const Icon = ICONS[icon];
+  // Guests only see close buttons; every add/edit/delete/confirm action is hidden.
+  if (readOnly && icon !== "close") return null;
   return (
     <button
       type={type}
@@ -119,6 +123,8 @@ export function DeleteButton({
   title?: string;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const readOnly = useReadOnly();
+  if (readOnly) return null;
   if (confirming) {
     return (
       <span role="group" aria-label={`${label}?`} className="flex shrink-0 items-center gap-0.5">
