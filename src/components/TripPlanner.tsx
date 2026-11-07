@@ -574,7 +574,7 @@ export function TripPlanner() {
 
       {!isGuest && (
       <footer className="mx-auto max-w-6xl px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] text-center text-xs text-ink-soft sm:px-6">
-        {sync.status === "local" ? "ข้อมูลบันทึกอัตโนมัติในเบราว์เซอร์นี้" : "ข้อมูลบันทึกอัตโนมัติ และทุกคนเห็นข้อมูลเดียวกัน"} ·{" "}
+        ข้อมูลบันทึกอัตโนมัติ ·{" "}
         {confirmReset ? (
           <>
             <button
@@ -676,7 +676,7 @@ function TripName({ name, onChange }: { name: string; onChange: (name: string) =
 
 const SYNC_TEXT: Record<SyncStatus, string> = {
   connecting: "⏳ กำลังโหลดข้อมูลล่าสุด…",
-  local: "💾 บันทึกเฉพาะเครื่องนี้",
+  local: "", // no database connected: show nothing
   synced: "☁️ ซิงก์แล้ว",
   saving: "⏳ กำลังบันทึก…",
   offline: "⚠️ ออฟไลน์ — จะซิงก์ให้เมื่อต่อเน็ตได้",
@@ -691,10 +691,10 @@ function SyncBadge({ status, updatedAt, guest }: { status: SyncStatus; updatedAt
       ? ` · ${new Date(updatedAt).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
       : "";
   const warn = status === "offline" || status === "tooLarge" || status === "denied";
+  if (status === "local") return null;
   return (
     <p
       aria-live="polite"
-      title={status === "local" ? "ยังไม่ได้เชื่อมฐานข้อมูล — ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น" : undefined}
       className={`truncate text-[11px] ${warn ? "font-medium text-alert-ink" : "text-ink-soft"}`}
     >
       {guest && status === "synced" ? "👀 ดูอย่างเดียว · อัปเดตอัตโนมัติ" : SYNC_TEXT[status]}
