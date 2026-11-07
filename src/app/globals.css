@@ -1,26 +1,94 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Theme: White · Baby Blue · Black · Grey
+   Tokens are named by role so components say what a colour means, not which colour it is. */
+@theme {
+  --color-surface: #f4f6f8; /* secondary background: inputs, chips, hover */
+  --color-line: #e3e7ec; /* borders and dividers */
+  --color-ink: #111418; /* primary text, primary buttons (black) */
+  --color-ink-soft: #6b7280; /* secondary text (grey) */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-baby: #dff1fc; /* main accent (baby blue) */
+  --color-baby-ink: #1d6fa5;
+  --color-done: #e8f4fb; /* visited / booked */
+  --color-done-ink: #2a7fb8;
+  --color-alert: #eceef1; /* not booked, delete, errors (grey + black) */
+  --color-alert-ink: #111418;
+  --color-alt: #f1f3f5; /* backup plan */
+  --color-alt-ink: #4b5563;
+  --color-sky: #bfe2f7; /* deeper baby blue for category badges */
+  --color-sky-ink: #155a8a;
+  --color-grey: #e5e7eb;
+  --color-grey-ink: #374151;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-prompt), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #ffffff;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* ---------- iPhone Safari ---------- */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    /* Landscape: keep content clear of the notch (viewport-fit=cover). */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* No 300ms double-tap-zoom delay on tappable things. */
+  button,
+  a,
+  label,
+  summary,
+  select,
+  [role="tab"] {
+    touch-action: manipulation;
+  }
+
+  /* iOS renders empty date/time inputs collapsed and centred; give them a normal height and alignment. */
+  input[type="date"],
+  input[type="time"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 2.5rem;
+  }
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
+}
+
+/* Hamburger drawer slide-in */
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #main-menu-drawer {
+    animation: none;
+  }
+}
+
+/* Hide scrollbars everywhere (page, modals, horizontal chip rows, drawer) while keeping
+   touch, wheel, trackpad and keyboard scrolling. */
+@layer base {
+  * {
+    scrollbar-width: none; /* Firefox, Chrome/Edge 121+ */
+  }
+  *::-webkit-scrollbar {
+    /* Safari / iOS and older Chromium */
+    display: none;
+    width: 0;
+    height: 0;
+  }
 }
