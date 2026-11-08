@@ -10,7 +10,7 @@ import {
   baht,
   categoryBadge,
   findCategory,
-  formatDate,
+  formatDayLabel,
   isSafeUrl,
   mapsSearchUrl,
   planName,
@@ -54,6 +54,8 @@ export function Itinerary({
   thbPerJpy,
   flights,
   hotels,
+  wishesToBuy,
+  onOpenWishlist,
   onSave,
   onDelete,
   onUpdateDay,
@@ -70,6 +72,10 @@ export function Itinerary({
   thbPerJpy: number;
   flights: Flight[];
   hotels: Hotel[];
+  /** Wishes still to buy at each activity, keyed by activity id. */
+  wishesToBuy: Map<string, number>;
+  /** Open the Wishlist at this activity's items. */
+  onOpenWishlist: (activityId: string) => void;
   onSave: (a: Activity) => void;
   onDelete: (id: string) => void;
   onUpdateDay: (day: Day) => void;
@@ -149,6 +155,8 @@ export function Itinerary({
                             start={activityStart(day.date, a.time)}
                             costs={costs.get(a.id) ?? []}
                             thbPerJpy={thbPerJpy}
+                            toBuy={wishesToBuy.get(a.id) ?? 0}
+                            onOpenWishlist={() => onOpenWishlist(a.id)}
                             onChange={onSave}
                             onEdit={() => setDraft(a)}
                             onDelete={() => onDelete(a.id)}
@@ -257,7 +265,7 @@ function DayHeader({
         </div>
         <div className="space-y-3 rounded-xl bg-surface/70 p-3">
           <div>
-            <label className={labelClass} htmlFor={`day-ootd-${day.id}`}>👗 OOTD · ธีมชุดของวันนี้</label>
+            <label className={labelClass} htmlFor={`day-ootd-${day.id}`}>OOTD · ธีมชุดของวันนี้</label>
             <input
               id={`day-ootd-${day.id}`}
               className={inputClass}
@@ -268,7 +276,7 @@ function DayHeader({
           </div>
           <ImagePicker
             idPrefix={`day-ootd-${day.id}`}
-            label="📷 รูปตัวอย่างชุด"
+            label="รูปตัวอย่างชุด"
             images={ootdImages}
             onUpdate={(update) => setOotdImages(update)}
           />
@@ -295,14 +303,14 @@ function DayHeader({
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="rounded-full bg-ink px-3 py-1 text-xs font-semibold tracking-wide text-white">DAY {index}</span>
         <h2 className="text-xl font-semibold">{day.title}</h2>
-        <span className="text-sm text-ink-soft">{formatDate(day.date)}</span>
+        <span className="text-sm text-ink-soft">{formatDayLabel(day.date)}</span>
         <IconButton icon="edit" label={`แก้ไข Day ${index}`} onClick={start} className="-ml-1.5 self-center" />
       </div>
       <OotdLine ootd={day.ootd} onEdit={start} onViewImage={setViewing} />
       <Progress done={visitedCount} total={total} />
       {viewing !== null && day.ootd.images[viewing] && (
         <ImageViewer
-          title={`👗 OOTD · ${day.ootd.theme || day.title}`}
+          title={`OOTD · ${day.ootd.theme || day.title}`}
           images={day.ootd.images}
           index={viewing}
           onIndex={setViewing}
@@ -328,21 +336,21 @@ function OotdLine({
     if (readOnly) {
       return (
         <p className="mt-1.5 flex items-center gap-2 text-xs text-ink-soft/70">
-          <span className="font-medium tracking-wide">👗 OOTD</span>
+          <span className="font-medium tracking-wide">OOTD</span>
           <span>ไม่มีธีมชุด</span>
         </p>
       );
     }
     return (
       <button onClick={onEdit} className="mt-1.5 flex items-center gap-2 text-xs text-ink-soft/70 transition hover:text-ink">
-        <span className="font-medium tracking-wide">👗 OOTD</span>
+        <span className="font-medium tracking-wide">OOTD</span>
         <span>ไม่มีธีมชุด</span>
       </button>
     );
   }
   return (
     <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs text-ink-soft">
-      <span className="shrink-0 font-medium tracking-wide">👗 OOTD</span>
+      <span className="shrink-0 font-medium tracking-wide">OOTD</span>
       {ootd.theme && <span className="min-w-0 truncate">{ootd.theme}</span>}
       {ootd.images.length > 0 && (
         <span className="flex shrink-0 gap-1">
@@ -358,7 +366,7 @@ function OotdLine({
             </button>
           ))}
           {ootd.images.length > 4 && (
-            <button onClick={() => onViewImage(4)} className="rounded-md bg-surface px-1.5 text-[11px] hover:text-ink">
+            <button onClick={() => onViewImage(4)} className="rounded-md bg-white px-1.5 text-[11px] hover:text-ink">
               +{ootd.images.length - 4}
             </button>
           )}
@@ -380,6 +388,8 @@ function ActivityCard({
   start,
   costs,
   thbPerJpy,
+  toBuy,
+  onOpenWishlist,
   onChange,
   onEdit,
   onDelete,
@@ -393,6 +403,9 @@ function ActivityCard({
   /** Expenses tied to this activity (booking, linked expenses, wishes bought here). */
   costs: Expense[];
   thbPerJpy: number;
+  /** Wishlist items still to buy here. */
+  toBuy: number;
+  onOpenWishlist: () => void;
   onChange: (a: Activity) => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -425,9 +438,8 @@ function ActivityCard({
 
   return (
     <li
-      className={`relative rounded-2xl border p-3 shadow-sm transition ${
-        a.visited ? "border-done-ink/30 bg-done/25" : "border-line bg-white/80"
-      }`}
+      id={`activity-${a.id}`}
+      className={`card-fill-hover relative scroll-mt-32 rounded-2xl p-3 ${a.visited ? "bg-done/50" : "bg-surface/60"}`}
     >
       <span
         aria-hidden
@@ -466,7 +478,9 @@ function ActivityCard({
 
         <div className="min-w-0 flex-1">
           {a.visited && (
-            <p className="mb-1.5 text-xs font-medium text-done-ink sm:pr-20">✅ ไปแล้ว · ติ๊กออกเพื่อแก้ไขหรือเปลี่ยนแผน</p>
+            <p className="mb-1.5 text-xs sm:pr-20">
+              <span className="rounded-full bg-visited px-2 py-0.5 font-semibold text-visited-ink">ไปแล้ว</span>
+            </p>
           )}
           <div
             inert={a.visited}
@@ -477,19 +491,28 @@ function ActivityCard({
               <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${categoryBadge(cat)}`}>
                 {cat.icon} {cat.label}
               </span>
+              {toBuy > 0 && (
+                <button
+                  onClick={onOpenWishlist}
+                  title="ดูใน Wishlist"
+                  className="text-[11px] font-medium text-pending-ink underline underline-offset-2 hover:opacity-80"
+                >
+                  มีของที่ต้องซื้อ {toBuy}
+                </button>
+              )}
               {costs.length > 0 && (
                 <button
                   onClick={() => setShowCosts((v) => !v)}
                   aria-expanded={showCosts}
-                  className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-ink hover:bg-baby"
+                  className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-ink hover:bg-baby"
                 >
-                  💴 {baht(total)} {showCosts ? "▴" : "▾"}
+                  {baht(total)} {showCosts ? "▴" : "▾"}
                 </button>
               )}
             </div>
 
             {showCosts && costs.length > 0 && (
-              <ul className="mt-1.5 space-y-0.5 rounded-xl bg-surface/60 px-2.5 py-1.5 text-xs">
+              <ul className="mt-1.5 space-y-0.5 rounded-xl bg-white/70 px-2.5 py-1.5 text-xs">
                 {costs.map((e) => (
                   <li key={e.id} className="flex gap-2">
                     <span className="min-w-0 flex-1 truncate">
@@ -511,13 +534,14 @@ function ActivityCard({
               <div className="mt-2 space-y-2">
                 {plans.map((place, i) => {
                   const active = a.planIndex === i;
-                  const isOpen = openPlans.has(i);
+                  // Visited: every plan folds to its one-line header (opens again once unticked).
+                  const isOpen = !a.visited && openPlans.has(i);
                   const bodyId = `plan-${a.id}-${i}`;
                   return (
                     <div
                       key={i}
                       className={`min-w-0 rounded-xl border transition ${
-                        active ? "border-baby-ink/40 bg-white ring-1 ring-baby-ink/20" : "border-dashed border-line bg-surface/40"
+                        active ? "border-baby-ink/40 bg-white ring-1 ring-baby-ink/20" : "border-dashed border-line bg-white/50"
                       }`}
                     >
                       <div className="flex items-center gap-2 p-2 text-xs">
@@ -539,7 +563,7 @@ function ActivityCard({
                           {!isOpen && <span className="min-w-0 truncate font-medium text-ink">· {place.title}</span>}
                           {!isOpen && place.subtasks.length > 0 && (
                             <span className="shrink-0 text-ink-soft">
-                              🗺️ {place.subtasks.filter((t) => t.done).length}/{place.subtasks.length}
+                              {place.subtasks.filter((t) => t.done).length}/{place.subtasks.length}
                             </span>
                           )}
                         </button>
@@ -572,13 +596,18 @@ function ActivityCard({
               </div>
             ) : (
               <div className="mt-1.5">
-                <PlaceView place={a} onViewImage={(index) => setViewing({ place: a, index })} />
-                <SubTaskList
-                  placeTitle={a.title}
-                  subtasks={a.subtasks}
-                  onChange={(subtasks) => onChange(updatePlace(a, 0, (p) => ({ ...p, subtasks })))}
-                />
-                <BookingInfo title={a.title} booking={a.booking} members={members} start={start} onToggleBooked={readOnly ? undefined : () => toggleBooked(0)} />
+                <PlaceView place={a} compact={a.visited} onViewImage={(index) => setViewing({ place: a, index })} />
+                {/* Visited: folded to just the title; details come back once unticked. */}
+                {!a.visited && (
+                  <>
+                    <SubTaskList
+                      placeTitle={a.title}
+                      subtasks={a.subtasks}
+                      onChange={(subtasks) => onChange(updatePlace(a, 0, (p) => ({ ...p, subtasks })))}
+                    />
+                    <BookingInfo title={a.title} booking={a.booking} members={members} start={start} onToggleBooked={readOnly ? undefined : () => toggleBooked(0)} />
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -599,10 +628,18 @@ function ActivityCard({
 }
 
 /** One plan's details: title, note, photos, popular guidelines and map link. */
-function PlaceView({ place, onViewImage }: { place: Place; onViewImage: (index: number) => void }) {
+function PlaceView({
+  place,
+  compact = false,
+  onViewImage,
+}: {
+  place: Place;
+  /** Only the title row (used once the activity is visited). */
+  compact?: boolean;
+  onViewImage: (index: number) => void;
+}) {
   const hasLink = place.mapUrl && isSafeUrl(place.mapUrl);
-  return (
-    <>
+  const titleRow = (
       <div className="flex items-start gap-2">
         <p className="min-w-0 flex-1 break-words font-medium leading-snug">{place.title}</p>
         <a
@@ -615,6 +652,11 @@ function PlaceView({ place, onViewImage }: { place: Place; onViewImage: (index: 
           📍 Open Map
         </a>
       </div>
+  );
+  if (compact) return titleRow;
+  return (
+    <>
+      {titleRow}
       {place.note && <p className="mt-1 text-sm text-ink-soft">{place.note}</p>}
 
       {place.images.length > 0 && (
@@ -635,9 +677,9 @@ function PlaceView({ place, onViewImage }: { place: Place; onViewImage: (index: 
       )}
 
       {place.guidelines.length > 0 && (
-        <details className="mt-2 rounded-lg bg-surface/70 px-2.5 py-1.5 text-sm">
+        <details className="mt-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-sm">
           <summary className="cursor-pointer text-xs font-medium text-ink-soft">
-            💡 Tips! ({place.guidelines.length})
+            Tips! ({place.guidelines.length})
           </summary>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {place.guidelines.map((g, i) => (
@@ -736,7 +778,7 @@ function ActivityForm({
     const all = [main, ...backups];
     for (let i = 0; i < all.length; i++) {
       const p = all[i];
-      const name = planName(i, backups.length).replace(/^\S+ /, "");
+      const name = planName(i, backups.length);
       if (!p.title) return fail(i === 0 ? "ใส่ชื่อสถานที่ของแผนหลักก่อนนะ" : `ใส่ชื่อสถานที่ของ${name} หรือกดลบแผนนี้`, i);
       if (p.mapUrl && !isSafeUrl(p.mapUrl)) return fail(`ลิงก์ Google Maps ของ${name}ต้องขึ้นต้นด้วย https://`, i);
       const bookingError = validateBooking(p.booking, members);
@@ -772,7 +814,7 @@ function ActivityForm({
               </button>
             ))}
           </div>
-          <p className="mt-1 text-[11px] text-ink-soft">เพิ่ม/แก้ไข/ลบประเภทได้ที่การ์ด “🏷️ ประเภทกิจกรรม”</p>
+          <p className="mt-1 text-[11px] text-ink-soft">เพิ่ม/แก้ไข/ลบประเภทได้ที่การ์ด “ประเภทกิจกรรม”</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -781,7 +823,7 @@ function ActivityForm({
             <select id="day" className={inputClass} value={form.dayId} onChange={(e) => set("dayId", e.target.value)}>
               {days.map((d, i) => (
                 <option key={d.id} value={d.id}>
-                  Day {i + 1} · {formatDate(d.date)}
+                  Day {i + 1} · {formatDayLabel(d.date)}
                 </option>
               ))}
             </select>
@@ -849,7 +891,7 @@ function ActivityForm({
               {form.backups.length > 0 && (
                 <PlanInUseBar inUse={form.planIndex === i} onUse={() => set("planIndex", i)}>
                   {i > 0 && (
-                    <DeleteButton label={`ลบ${planName(i, form.backups.length).replace(/^\S+ /, "")}`} onConfirm={() => removeBackup(i)} />
+                    <DeleteButton label={`ลบ${planName(i, form.backups.length)}`} onConfirm={() => removeBackup(i)} />
                   )}
                 </PlanInUseBar>
               )}
@@ -872,7 +914,7 @@ function ActivityForm({
         <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-sm">
           <label className="flex cursor-pointer items-center gap-1.5">
             <input type="checkbox" checked={form.visited} onChange={(e) => set("visited", e.target.checked)} />
-            ✅ ไปแล้ว
+            ไปแล้ว
           </label>
         </div>
 
@@ -974,7 +1016,7 @@ function PlaceFields({
       />
 
       <div>
-        <label className={labelClass} htmlFor={id("guidelines")}>💡 Tips! (บรรทัดละ 1 ข้อ)</label>
+        <label className={labelClass} htmlFor={id("guidelines")}>Tips! (บรรทัดละ 1 ข้อ)</label>
         <textarea
           id={id("guidelines")}
           rows={3}

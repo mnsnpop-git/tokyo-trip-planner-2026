@@ -1,6 +1,7 @@
 "use client";
 
 import { useReadOnly } from "./ReadOnly";
+import { useThemeMode, type ThemeMode } from "@/lib/theme";
 import { useEffect, useRef, useState } from "react";
 import { XIcon } from "./Icons";
 
@@ -225,7 +226,7 @@ export function HamburgerNav<T extends string>({
 
       {open && (
         <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-ink/30 backdrop-blur-sm" onClick={() => setOpen(false)} aria-hidden />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} aria-hidden />
           <div
             ref={drawerRef}
             id="main-menu-drawer"
@@ -256,14 +257,41 @@ export function HamburgerNav<T extends string>({
                 onReorder={onReorder}
               />
             </nav>
-            <p className="mt-auto px-4 pt-6 text-[11px] leading-relaxed text-ink-soft">
-              ⋮⋮ ลากเพื่อจัดเรียงเมนู
-              <br />
-              มือถือ: กดค้างแล้วลาก · คีย์บอร์ด: Alt + ↑/↓
-            </p>
+            <ThemeSwitch />
           </div>
         </div>
       )}
     </>
+  );
+}
+
+/** Light / Dark / Auto, at the bottom of the menu drawer (saved on this device). */
+function ThemeSwitch() {
+  const [mode, setMode] = useThemeMode();
+  const options: [ThemeMode, string][] = [
+    ["light", "Light"],
+    ["dark", "Dark"],
+    ["system", "Auto"],
+  ];
+  return (
+    <div className="mt-auto px-4 pt-6">
+      <p className="mb-1.5 text-[11px] font-medium text-ink-soft">ธีม</p>
+      <div role="radiogroup" aria-label="ธีม" className="flex rounded-full bg-surface p-1">
+        {options.map(([id, label]) => (
+          <button
+            key={id}
+            role="radio"
+            aria-checked={mode === id}
+            onClick={() => setMode(id)}
+            title={id === "system" ? "ตามการตั้งค่าของเครื่อง" : undefined}
+            className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+              mode === id ? "bg-white text-ink shadow-sm" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

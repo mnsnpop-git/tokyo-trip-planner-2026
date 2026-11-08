@@ -43,7 +43,7 @@ export function Categories({
   return (
     <section aria-label="ประเภทกิจกรรม" className="rounded-3xl border border-line bg-white/80 p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-1.5">
-        <h2 className="text-lg font-semibold">🏷️ ประเภทกิจกรรม</h2>
+        <h2 className="text-lg font-semibold">ประเภทกิจกรรม</h2>
         <IconButton icon="add" label="เพิ่มประเภท" onClick={() => startEdit("new")} disabled={editing === "new"} />
         <span className="ml-auto text-sm text-ink-soft">{categories.length} ประเภท</span>
       </div>

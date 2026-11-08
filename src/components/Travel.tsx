@@ -69,6 +69,22 @@ export function AirlineLogo({ code, name, size = "md" }: { code: string; name: s
   );
 }
 
+/** Label/value lines in a details sheet; empty values are left out. */
+function CostDetails({ rows }: { rows: [string, string][] }) {
+  return (
+    <dl className="divide-y divide-line/60 text-sm">
+      {rows
+        .filter(([, v]) => v)
+        .map(([k, v]) => (
+          <div key={k} className="flex gap-3 py-2">
+            <dt className="w-24 shrink-0 text-ink-soft">{k}</dt>
+            <dd className="min-w-0 flex-1 break-words">{v}</dd>
+          </div>
+        ))}
+    </dl>
+  );
+}
+
 function costLine(c: TravelCost, people: number, nights: number): string {
   const total = travelTotal(c, people, nights);
   if (c.priceType === "perPerson") return `${money(c.amount, c.currency)}/คน × ${people} = ${money(total, c.currency)}`;
@@ -79,9 +95,9 @@ function costLine(c: TravelCost, people: number, nights: number): string {
 function BookedBadge({ booked }: { booked: boolean }) {
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${booked ? "bg-done text-done-ink" : "bg-alert text-alert-ink"}`}
+      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${booked ? "bg-done text-done-ink" : "bg-pending text-pending-ink"}`}
     >
-      {booked ? "✅ จองแล้ว" : "⏳ ยังไม่จอง"}
+      {booked ? "จองแล้ว" : "ยังไม่จอง"}
     </span>
   );
 }
@@ -94,7 +110,7 @@ function LegRoute({ leg, label }: { leg: FlightLeg; label: string }) {
       <p className="mb-1 flex gap-2 text-[11px] text-ink-soft">
         {label && <span className="font-semibold text-ink">{label}</span>}
         <span>{leg.flightNo}</span>
-        <span className="ml-auto">📅 {leg.departDate ? formatDate(leg.departDate) : "ยังไม่ระบุวัน"}</span>
+        <span className="ml-auto">{leg.departDate ? formatDate(leg.departDate) : "ยังไม่ระบุวัน"}</span>
       </p>
       <div className="flex items-center gap-2">
         <div className="min-w-0 text-center">
@@ -153,7 +169,7 @@ export function TravelStrip({
               <span className="font-semibold">{leg.flightNo || f.airlineName}</span> · {leg.from} {leg.departTime} → {leg.to}{" "}
               {leg.arriveTime}
             </span>
-            <span className="shrink-0 text-ink-soft">{departs ? "🛫 ออก" : "🛬 ถึง"}</span>
+            <span className="shrink-0 text-ink-soft">{departs ? "ออก" : "ถึง"}</span>
           </li>
         );
       })}
@@ -205,6 +221,8 @@ export function TravelSection({
 }) {
   const [editingFlight, setEditingFlight] = useState<Flight | "new" | null>(null);
   const [editingHotel, setEditingHotel] = useState<Hotel | "new" | null>(null);
+  // Cost details live in a "view" sheet so the cards stay short.
+  const [viewing, setViewing] = useState<{ kind: "flight"; id: string } | { kind: "hotel"; id: string } | null>(null);
   const name = (id: string) => {
     const m = members.find((x) => x.id === id);
     return m ? `${m.emoji} ${m.name}` : "?";
@@ -220,7 +238,7 @@ export function TravelSection({
     (s, h) => s + (h.cost && !packaged.has(h.id) ? toThb(travelTotal(h.cost, h.guests.length, hotelNights(h)), h.cost.currency) : 0),
     0,
   );
-  const payer = (c: TravelCost) => (c.selfPaid ? "👥 จ่ายกันเอง" : `🙋 ${name(c.paidBy)} จ่ายแทนก่อน`);
+  const payer = (c: TravelCost) => (c.selfPaid ? "จ่ายกันเอง" : `${name(c.paidBy)} จ่ายแทนก่อน`);
 
   const saveFlight = (f: Flight) =>
     onChange({ flights: flights.some((x) => x.id === f.id) ? flights.map((x) => (x.id === f.id ? f : x)) : [...flights, f] });
@@ -238,12 +256,12 @@ export function TravelSection({
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {/* Flights */}
-      <article className="rounded-3xl border border-line bg-white/80 p-4 shadow-sm">
+      <article className="card-hover rounded-3xl border border-line bg-white/80 p-4 shadow-sm">
         <header className="mb-3 flex items-center gap-1.5">
-          <h3 className="font-semibold">✈️ เที่ยวบิน</h3>
+          <h3 className="font-semibold">เที่ยวบิน</h3>
           <IconButton icon="add" label="เพิ่มเที่ยวบิน" onClick={() => setEditingFlight("new")} />
           {flightTotal > 0 && (
-            <span className="ml-auto rounded-full bg-surface px-2 py-0.5 text-xs font-medium">💴 {baht(flightTotal)}</span>
+            <span className="ml-auto rounded-full bg-surface px-2 py-0.5 text-xs font-medium">{baht(flightTotal)}</span>
           )}
         </header>
         {sortedFlights.length === 0 ? (
@@ -255,19 +273,20 @@ export function TravelSection({
             {sortedFlights.map((f) => {
               const dir = FLIGHT_DIRECTIONS.find((d) => d.id === f.direction)!;
               return (
-                <li key={f.id} className="rounded-2xl bg-surface/60 p-3">
+                <li key={f.id} className="card-fill-hover rounded-2xl bg-surface/60 p-3">
                   <div className="flex items-start gap-2.5">
                     <AirlineLogo code={f.airline} name={f.airlineName} />
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-1.5 text-sm">
                         <span className="rounded-full bg-ink px-2 py-0.5 text-[11px] font-semibold text-white">
-                          {f.returnLeg ? "🔁 ไป-กลับ" : `${dir.icon} ${dir.label}`}
+                          {f.returnLeg ? "ไป-กลับ" : `${dir.icon} ${dir.label}`}
                         </span>
                         <BookedBadge booked={f.booked} />
                       </p>
                       <p className="mt-0.5 truncate text-xs text-ink-soft">{f.airlineName || f.airline}</p>
                     </div>
                     <div className="-mr-1 -mt-1 flex shrink-0">
+                      <IconButton icon="view" size="sm" label={`ดูรายละเอียด ${f.flightNo}`} onClick={() => setViewing({ kind: "flight", id: f.id })} />
                       <IconButton icon="edit" size="sm" label={`แก้ไข ${f.flightNo}`} onClick={() => setEditingFlight(f)} />
                       <DeleteButton
                         size="sm"
@@ -278,29 +297,10 @@ export function TravelSection({
                   </div>
 
                   {flightLegs(f).map(({ leg, kind }) => (
-                    <LegRoute key={kind} leg={leg} label={f.returnLeg ? (kind === "return" ? "🛬 ขากลับ" : "🛫 ขาไป") : ""} />
+                    <LegRoute key={kind} leg={leg} label={f.returnLeg ? (kind === "return" ? "ขากลับ" : "ขาไป") : ""} />
                   ))}
-                  <p className="mt-1.5 text-xs text-ink-soft">
-                    👥 {f.passengers.length} คน{f.bookingRef && ` · รหัสจอง ${f.bookingRef}`}
-                  </p>
-                  {f.cost && f.cost.amount > 0 && (
-                    <p className="mt-0.5 text-xs">
-                      💴 <span className="font-medium">{costLine(f.cost, f.passengers.length, 1)}</span>
-                      <span className="text-ink-soft"> · {payer(f.cost)}</span>
-                    </p>
-                  )}
-                  {f.cost && (
-                    <p className="mt-0.5 text-xs">
-                      {f.packageHotelIds.length > 0 ? (
-                        <span className="rounded-full bg-alt px-2 py-0.5 font-medium text-alt-ink">
-                          ✈️+🏨 รวมที่พักด้วย: {f.packageHotelIds.map((id) => hotelName.get(id)).filter(Boolean).join(", ")}
-                        </span>
-                      ) : (
-                        <span className="text-ink-soft">✈️ ค่าตั๋วอย่างเดียว (แยกที่พัก)</span>
-                      )}
-                    </p>
-                  )}
-                  {f.note && <p className="mt-0.5 text-xs text-ink-soft">📝 {f.note}</p>}
+                  {f.bookingRef && <p className="mt-1.5 text-xs text-ink-soft">รหัสจอง {f.bookingRef}</p>}
+                  {f.note && <p className="mt-0.5 text-xs text-ink-soft">{f.note}</p>}
                 </li>
               );
             })}
@@ -309,12 +309,12 @@ export function TravelSection({
       </article>
 
       {/* Hotels */}
-      <article className="rounded-3xl border border-line bg-white/80 p-4 shadow-sm">
+      <article className="card-hover rounded-3xl border border-line bg-white/80 p-4 shadow-sm">
         <header className="mb-3 flex items-center gap-1.5">
-          <h3 className="font-semibold">🏨 ที่พัก</h3>
+          <h3 className="font-semibold">ที่พัก</h3>
           <IconButton icon="add" label="เพิ่มที่พัก" onClick={() => setEditingHotel("new")} />
           {hotelTotal > 0 && (
-            <span className="ml-auto rounded-full bg-surface px-2 py-0.5 text-xs font-medium">💴 {baht(hotelTotal)}</span>
+            <span className="ml-auto rounded-full bg-surface px-2 py-0.5 text-xs font-medium">{baht(hotelTotal)}</span>
           )}
         </header>
         {sortedHotels.length === 0 ? (
@@ -329,11 +329,11 @@ export function TravelSection({
               const attached = h.mapUrl && isSafeUrl(h.mapUrl) ? h.mapUrl : "";
               const map = attached || (h.address || h.name ? mapsSearchUrl(h.address || h.name) : "");
               return (
-                <li key={h.id} className="rounded-2xl bg-surface/60 p-3">
+                <li key={h.id} className="card-fill-hover rounded-2xl bg-surface/60 p-3">
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-semibold">🏨 {h.name || "ที่พัก"}</span>
+                        <span className="font-semibold">{h.name || "ที่พัก"}</span>
                         <BookedBadge booked={h.booked} />
                       </p>
                       {map && (
@@ -350,6 +350,7 @@ export function TravelSection({
                       )}
                     </div>
                     <div className="-mr-1 -mt-1 flex shrink-0">
+                      <IconButton icon="view" size="sm" label={`ดูรายละเอียด ${h.name}`} onClick={() => setViewing({ kind: "hotel", id: h.id })} />
                       <IconButton icon="edit" size="sm" label={`แก้ไข ${h.name}`} onClick={() => setEditingHotel(h)} />
                       <DeleteButton
                         size="sm"
@@ -364,27 +365,14 @@ export function TravelSection({
                       <p className="font-semibold">{h.checkIn ? formatDate(h.checkIn) : "—"}</p>
                       {h.checkInTime && <p className="font-mono text-ink-soft">{h.checkInTime}</p>}
                     </div>
-                    <span className="rounded-full bg-baby px-2 py-0.5 text-[11px] font-semibold text-baby-ink">🌙 {nights} คืน</span>
+                    <span className="rounded-full bg-baby px-2 py-0.5 text-[11px] font-semibold text-baby-ink">{nights} คืน</span>
                     <div>
                       <p className="text-[10px] text-ink-soft">เช็กเอาต์</p>
                       <p className="font-semibold">{h.checkOut ? formatDate(h.checkOut) : "—"}</p>
                       {h.checkOutTime && <p className="font-mono text-ink-soft">{h.checkOutTime}</p>}
                     </div>
                   </div>
-                  {packaged.has(h.id) ? (
-                    <p className="mt-1.5 text-xs">
-                      <span className="rounded-full bg-alt px-2 py-0.5 font-medium text-alt-ink">
-                        💴 รวมในค่าตั๋ว {packaged.get(h.id)!.flightNo || packaged.get(h.id)!.airlineName} แล้ว
-                      </span>
-                    </p>
-                  ) : h.cost && h.cost.amount > 0 && (
-                    <p className="mt-1.5 text-xs">
-                      💴 <span className="font-medium">{costLine(h.cost, h.guests.length, nights)}</span>
-                      <span className="text-ink-soft"> · {payer(h.cost)}</span>
-                    </p>
-                  )}
-                  <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-ink-soft">
-                    <span>👥 {h.guests.length} คน</span>
+                  <p className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-ink-soft">
                     {h.bookingRef && <span>รหัสจอง {h.bookingRef}</span>}
                     {h.url && isSafeUrl(h.url) && (
                       <a href={h.url} target="_blank" rel="noreferrer" className="font-medium text-baby-ink hover:underline">
@@ -392,13 +380,64 @@ export function TravelSection({
                       </a>
                     )}
                   </p>
-                  {h.note && <p className="mt-0.5 text-xs text-ink-soft">📝 {h.note}</p>}
+                  {h.note && <p className="mt-0.5 text-xs text-ink-soft">{h.note}</p>}
                 </li>
               );
             })}
           </ul>
         )}
       </article>
+
+      {viewing?.kind === "flight" &&
+        (() => {
+          const f = flights.find((x) => x.id === viewing.id);
+          if (!f) return null;
+          return (
+            <Modal title={`เที่ยวบิน ${f.flightNo || f.airlineName || ""}`.trim()} onClose={() => setViewing(null)}>
+              <CostDetails
+                rows={[
+                  ["ค่าตั๋ว", f.cost && f.cost.amount > 0 ? costLine(f.cost, f.passengers.length, 1) : "ยังไม่ได้ใส่ราคา"],
+                  ["คนจ่าย", f.cost && f.cost.amount > 0 ? payer(f.cost) : ""],
+                  [
+                    "ที่พัก",
+                    f.packageHotelIds.length > 0
+                      ? `รวมที่พักด้วย: ${f.packageHotelIds.map((id) => hotelName.get(id)).filter(Boolean).join(", ")}`
+                      : "ค่าตั๋วอย่างเดียว (แยกที่พัก)",
+                  ],
+                  ["ผู้โดยสาร", f.passengers.length ? `${f.passengers.length} คน · ${f.passengers.map(name).join(", ")}` : ""],
+                  ["รหัสจอง", f.bookingRef],
+                  ["โน้ต", f.note],
+                ]}
+              />
+            </Modal>
+          );
+        })()}
+      {viewing?.kind === "hotel" &&
+        (() => {
+          const h = hotels.find((x) => x.id === viewing.id);
+          if (!h) return null;
+          const inFlight = packaged.get(h.id);
+          return (
+            <Modal title={h.name || "ที่พัก"} onClose={() => setViewing(null)}>
+              <CostDetails
+                rows={[
+                  [
+                    "ค่าที่พัก",
+                    inFlight
+                      ? `รวมในค่าตั๋ว ${inFlight.flightNo || inFlight.airlineName} แล้ว`
+                      : h.cost && h.cost.amount > 0
+                        ? costLine(h.cost, h.guests.length, hotelNights(h))
+                        : "ยังไม่ได้ใส่ราคา",
+                  ],
+                  ["คนจ่าย", !inFlight && h.cost && h.cost.amount > 0 ? payer(h.cost) : ""],
+                  ["ผู้เข้าพัก", h.guests.length ? `${h.guests.length} คน · ${h.guests.map(name).join(", ")}` : ""],
+                  ["รหัสจอง", h.bookingRef],
+                  ["โน้ต", h.note],
+                ]}
+              />
+            </Modal>
+          );
+        })()}
 
       {editingFlight && (
         <FlightForm
@@ -518,7 +557,7 @@ function CostFields({
           }
           className="h-4 w-4 accent-ink"
         />
-        💴 มีค่าจอง (เข้า Budget อัตโนมัติ)
+        มีค่าจอง (เข้า Budget อัตโนมัติ)
       </label>
       {cost && (
         <>
@@ -575,8 +614,8 @@ function BookedToggle({ booked, onChange }: { booked: boolean; onChange: (b: boo
       <Segmented
         label="สถานะการจอง"
         options={[
-          [false, "⏳ ยังไม่จอง"],
-          [true, "✅ จองแล้ว"],
+          [false, "ยังไม่จอง"],
+          [true, "จองแล้ว"],
         ] as const}
         value={booked}
         onChange={onChange}
@@ -773,8 +812,8 @@ function FlightForm({
           <Segmented
             label="ประเภทตั๋ว"
             options={[
-              [true, "🔁 ไป-กลับ (Round Trip)"],
-              [false, "➡️ เที่ยวเดียว"],
+              [true, "ไป-กลับ (Round Trip)"],
+              [false, "เที่ยวเดียว"],
             ] as const}
             value={roundTrip}
             onChange={setRoundTrip}
@@ -837,11 +876,11 @@ function FlightForm({
           <p className="mt-1 text-[11px] text-ink-soft">โลโก้ดึงจากรหัสสายการบิน 2 ตัว (IATA)</p>
         </div>
 
-        <LegFields id="fl-out" title={roundTrip ? "🛫 ขาไป" : "✈️ เที่ยวบิน"} leg={f} onChange={set} />
+        <LegFields id="fl-out" title={roundTrip ? "ขาไป" : "เที่ยวบิน"} leg={f} onChange={set} />
         {f.returnLeg && (
           <LegFields
             id="fl-ret"
-            title="🛬 ขากลับ"
+            title="ขากลับ"
             leg={f.returnLeg}
             onChange={(p) => setF((x) => ({ ...x, returnLeg: x.returnLeg && { ...x.returnLeg, ...p } }))}
           />
@@ -872,15 +911,15 @@ function FlightForm({
             <Segmented
               label="ค่าตั๋วรวมที่พักไหม"
               options={[
-                [false, "✈️ แยกที่พัก"],
-                [true, "✈️+🏨 รวมที่พักด้วย"],
+                [false, "แยกที่พัก"],
+                [true, "รวมที่พักด้วย"],
               ] as const}
               value={withHotel}
               onChange={setWithHotel}
             />
             {withHotel &&
               (hotels.length === 0 ? (
-                <p className="text-xs text-alert-ink">ยังไม่มีที่พัก — เพิ่มที่พักในส่วน 🏨 ก่อน แล้วกลับมาเลือก</p>
+                <p className="text-xs text-alert-ink">ยังไม่มีที่พัก — เพิ่มที่พักในส่วนที่พักก่อน แล้วกลับมาเลือก</p>
               ) : (
                 <>
                   <p className="text-[11px] text-ink-soft">เลือกที่พักที่รวมอยู่ในราคานี้ — ที่พักนั้นจะไม่คิดเงินซ้ำ</p>
@@ -899,7 +938,7 @@ function FlightForm({
                             on ? "bg-alt text-alt-ink" : "bg-white text-ink-soft ring-1 ring-line"
                           }`}
                         >
-                          🏨 {h.name} · {hotelNights(h)} คืน
+                          {h.name} · {hotelNights(h)} คืน
                         </button>
                       );
                     })}
@@ -994,7 +1033,7 @@ function HotelForm({
           <input aria-label="วันเช็กเอาต์" type="date" min={h.checkIn} className={inputClass} value={h.checkOut} onChange={(e) => set({ checkOut: e.target.value })} />
           <input aria-label="เวลาเช็กอิน" type="time" className={inputClass} value={h.checkInTime} onChange={(e) => set({ checkInTime: e.target.value })} />
           <input aria-label="เวลาเช็กเอาต์" type="time" className={inputClass} value={h.checkOutTime} onChange={(e) => set({ checkOutTime: e.target.value })} />
-          <p className="col-span-2 text-center text-xs text-ink-soft">{nights > 0 ? `🌙 ${nights} คืน` : "เลือกวันเช็กเอาต์"}</p>
+          <p className="col-span-2 text-center text-xs text-ink-soft">{nights > 0 ? `${nights} คืน` : "เลือกวันเช็กเอาต์"}</p>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -1010,7 +1049,7 @@ function HotelForm({
         <PeopleChips label="ใครพักที่นี่" members={members} value={h.guests} onChange={(guests) => set({ guests })} />
         {includedIn ? (
           <p className="rounded-2xl bg-alt/60 p-3 text-sm text-alt-ink">
-            💴 ค่าที่พักนี้รวมอยู่ในค่าตั๋ว <b>{includedIn.flightNo || includedIn.airlineName}</b> แล้ว — แก้ได้ที่เที่ยวบินนั้น
+            ค่าที่พักนี้รวมอยู่ในค่าตั๋ว <b>{includedIn.flightNo || includedIn.airlineName}</b> แล้ว — แก้ได้ที่เที่ยวบินนั้น
           </p>
         ) : (
         <CostFields

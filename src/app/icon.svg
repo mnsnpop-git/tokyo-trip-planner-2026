@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Tokyo Trip: a white Tokyo Tower on the app's baby-blue ink. -->
+  <rect width="64" height="64" rx="14" fill="#1d6fa5"/>
+  <rect x="31" y="6" width="2" height="9" rx="1" fill="#fff"/>
+  <path fill="#fff" d="M32 13 L35.2 27 H28.8 Z"/>
+  <rect x="25.5" y="26" width="13" height="4" rx="1" fill="#fff"/>
+  <path fill="#fff" d="M28.6 30 H35.4 L38.6 39 H25.4 Z"/>
+  <rect x="21.5" y="38" width="21" height="4.5" rx="1" fill="#fff"/>
+  <path fill="#fff" d="M24.6 42.5 H39.4 L46.5 57 H39.5 C38.3 52 35.6 49 32 49 C28.4 49 25.7 52 24.5 57 H17.5 Z"/>
+  <circle cx="49" cy="15" r="2" fill="#dff1fc"/>
+  <circle cx="14" cy="22" r="1.5" fill="#dff1fc"/>
+</svg>

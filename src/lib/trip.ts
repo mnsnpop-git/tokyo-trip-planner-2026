@@ -270,7 +270,8 @@ function normalizeBooking(b: LooseBooking | null | undefined): Booking {
       required: Boolean(p.required),
       amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
       priceType: p.priceType === "perPerson" ? "perPerson" : "total",
-      currency: p.currency === "THB" ? "THB" : "JPY",
+      // Baht unless a yen amount was actually entered (older saves stored "JPY" on every empty payment).
+      currency: p.currency === "JPY" && Number.isFinite(amount) && amount > 0 ? "JPY" : "THB",
       selfPaid: Boolean(p.selfPaid),
       paidBy: str(p.paidBy),
       splitAmong: Array.isArray(p.splitAmong) ? p.splitAmong.filter((x): x is string => typeof x === "string") : [],
@@ -299,10 +300,10 @@ export function plansOf(a: Activity): Place[] {
   return [a, ...a.backups];
 }
 
-/** "📍 แผนหลัก", "🔁 แผนสำรอง" (only one) or "🔁 สำรอง 2". */
+/** "แผนหลัก", "แผนสำรอง" (only one) or "สำรอง 2". */
 export function planName(index: number, backupCount: number): string {
-  if (index === 0) return "📍 แผนหลัก";
-  return backupCount === 1 ? "🔁 แผนสำรอง" : `🔁 สำรอง ${index}`;
+  if (index === 0) return "แผนหลัก";
+  return backupCount === 1 ? "แผนสำรอง" : `สำรอง ${index}`;
 }
 
 export const MAX_IMAGES = 8;
@@ -772,6 +773,16 @@ export interface WishItem {
 
 export const hasGot = (w: WishItem, memberId: string) => memberId in w.gotBy;
 
+/** Bought: everyone who wants it has got theirs. */
+export const wishBought = (w: WishItem) => w.wantedBy.length > 0 && w.wantedBy.every((id) => hasGot(w, id));
+
+/** How many wishes are still to buy at each activity, keyed by activity id. */
+export function wishesToBuyByActivity(wishlist: WishItem[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const w of wishlist) if (w.activityId && !wishBought(w)) map.set(w.activityId, (map.get(w.activityId) ?? 0) + 1);
+  return map;
+}
+
 /** Done for this profile: they got theirs, or (if they don't want it) every wanter got theirs. */
 export function wishDoneFor(w: WishItem, memberId: string): boolean {
   if (w.wantedBy.includes(memberId)) return hasGot(w, memberId);
@@ -915,10 +926,36 @@ export function isSafeImageSrc(src: string): boolean {
   return isSafeUrl(src) || /^data:image\/(png|jpe?g|webp|gif);base64,/.test(src);
 }
 
+/** Trip dates, e.g. "09 - 15 Dec 2026", "28 Nov - 03 Dec 2026", "30 Dec 2026 - 02 Jan 2027"; "" without days. */
+export function formatDateRange(dates: string[]): string {
+  const valid = dates.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if (valid.length === 0) return "";
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const parts = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return { y, m: MONTHS[Number(m) - 1] ?? m, d };
+  };
+  const a = parts(valid[0]);
+  const b = parts(valid[valid.length - 1]);
+  if (valid[0] === valid[valid.length - 1]) return `${a.d} ${a.m} ${a.y}`;
+  if (a.y !== b.y) return `${a.d} ${a.m} ${a.y} - ${b.d} ${b.m} ${b.y}`;
+  if (a.m !== b.m) return `${a.d} ${a.m} - ${b.d} ${b.m} ${b.y}`;
+  return `${a.d} - ${b.d} ${b.m} ${b.y}`;
+}
+
 export function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short" });
+}
+
+/** Day heading in the same style as the tabs, e.g. "WED 9 DEC". */
+export function formatDayLabel(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const weekday = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const month = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  return `${weekday} ${d.getDate()} ${month}`;
 }
 
 /** Compact day label for tabs, e.g. "WED 09". */
@@ -1079,7 +1116,40 @@ export function settle(balances: Record<string, number>): Transfer[] {
 // ---------- Members / profiles ----------
 
 /** How many expenses/bookings reference a member; such members can't be removed without breaking the split. */
-export function memberUsage(data: ExpenseSources, id: string): number {
+/** Where a member is still referenced, per menu (a member can only be removed once all are 0). */
+export interface MemberUsage {
+  wishlist: number;
+  budget: number;
+  reservations: number;
+  checklist: number;
+  travel: number;
+}
+
+/** Menu icon and name for each place a member can be referenced (icons match the main menu). */
+export const MEMBER_USAGE_LABELS: Record<keyof MemberUsage, { icon: string; label: string }> = {
+  wishlist: { icon: "🛍️", label: "Wishlist" },
+  budget: { icon: "💴", label: "Budget" },
+  reservations: { icon: "🎫", label: "Reservations" },
+  checklist: { icon: "🎒", label: "Checklist" },
+  travel: { icon: "✈️", label: "เที่ยวบิน/ที่พัก" },
+};
+
+/** The menus that mention the member, in menu order, with their counts. */
+export function memberUsageItems(u: MemberUsage) {
+  return (Object.keys(MEMBER_USAGE_LABELS) as (keyof MemberUsage)[])
+    .filter((k) => u[k] > 0)
+    .map((k) => ({ key: k, ...MEMBER_USAGE_LABELS[k], count: u[k] }));
+}
+
+/** "Wishlist 1, Budget 8" — for the can't-delete note. */
+export const memberUsageText = (u: MemberUsage) =>
+  memberUsageItems(u)
+    .map((i) => `${i.label} ${i.count}`)
+    .join(", ");
+
+export const memberUsageTotal = (u: MemberUsage) => u.wishlist + u.budget + u.reservations + u.checklist + u.travel;
+
+export function memberUsage(data: ExpenseSources, id: string): MemberUsage {
   const inExpenses = allExpenses(data).filter((e) => e.paidBy === id || e.splitAmong.includes(id)).length;
   // Count references in both plans' bookings, including the plan not currently in use.
   const inBookings = data.activities
@@ -1094,7 +1164,7 @@ export function memberUsage(data: ExpenseSources, id: string): number {
   const inTravel =
     data.flights.filter((f) => f.passengers.includes(id) || f.cost?.paidBy === id).length +
     data.hotels.filter((h) => h.guests.includes(id) || h.cost?.paidBy === id).length;
-  return inExpenses + inBookings + inWishlist + inChecklist + inTravel;
+  return { wishlist: inWishlist, budget: inExpenses, reservations: inBookings, checklist: inChecklist, travel: inTravel };
 }
 
 /** A new trip starts with a single profile; more are added in the Travelers menu. */

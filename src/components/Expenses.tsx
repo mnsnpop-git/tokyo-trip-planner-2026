@@ -90,7 +90,7 @@ export function Expenses({
   return (
     <section aria-label="หารค่าใช้จ่าย" className="rounded-3xl border border-line bg-white/80 p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-1.5">
-        <h2 className="text-lg font-semibold">💰 หารค่าใช้จ่าย</h2>
+        <h2 className="text-lg font-semibold">หารค่าใช้จ่าย</h2>
         <IconButton icon="add" label="ลงรายการใหม่" onClick={() => setAdding(true)} />
         <div role="radiogroup" aria-label="หน่วยเงินที่แสดง" className="ml-auto flex overflow-hidden rounded-full border border-line text-sm">
           {(
@@ -115,8 +115,8 @@ export function Expenses({
       <div role="tablist" aria-label="หน้าค่าใช้จ่าย" className="mb-4 flex rounded-full bg-surface p-1">
         {(
           [
-            ["overview", "📊 ภาพรวม"],
-            ["list", `🧾 รายการ (${ordered.length})`],
+            ["overview", "ภาพรวม"],
+            ["list", `รายการ (${ordered.length})`],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -283,10 +283,10 @@ function Overview({
       </div>
 
       <div className="rounded-2xl border border-dashed border-done-ink/40 bg-done/40 p-3">
-        <h3 className="mb-0.5 text-sm font-semibold text-done-ink">🤝 ใครต้องโอนให้ใคร</h3>
+        <h3 className="mb-0.5 text-sm font-semibold text-done-ink">ใครต้องโอนให้ใคร</h3>
         <p className="mb-2 text-[11px] text-done-ink/80">คิดจากยอดที่ยังไม่ได้ติ๊กว่าจ่ายแล้วในแท็บรายการ</p>
         {transfers.length === 0 ? (
-          <p className="text-sm text-done-ink">ทุกคนเคลียร์กันหมดแล้ว 🎉</p>
+          <p className="text-sm text-done-ink">ทุกคนเคลียร์กันหมดแล้ว</p>
         ) : (
           <ul className="space-y-1.5 text-sm">
             {transfers.map((t, i) => (
@@ -306,7 +306,7 @@ function Overview({
       {activityTotals.length > 0 && (
         <details className="rounded-2xl border border-line p-3">
           <summary className="cursor-pointer text-sm font-semibold">
-            📍 สรุปตามกิจกรรม ({activityTotals.length}) · {fmt(activityTotals.reduce((s, { list }) => s + sumJpy(list, thbPerJpy), 0))}
+            สรุปตามกิจกรรม ({activityTotals.length}) · {fmt(activityTotals.reduce((s, { list }) => s + sumJpy(list, thbPerJpy), 0))}
           </summary>
           <ul className="mt-2 divide-y divide-line/70">
             {activityTotals.map(({ a, list }) => (
@@ -377,15 +377,6 @@ function ExpenseList({
   const theirTotal = theirs.reduce((s, e) => s + toJpy({ ...e, amount: shareOf(e) }, thbPerJpy), 0);
   const theirPaid = theirs.filter((e) => paid(e, person)).reduce((s, e) => s + toJpy({ ...e, amount: shareOf(e) }, thbPerJpy), 0);
 
-  const togglePaid = (e: Expense, id: string) => {
-    const list = data.paidShares[e.id] ?? [];
-    const next = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
-    const paidShares = { ...data.paidShares };
-    if (next.length) paidShares[e.id] = next;
-    else delete paidShares[e.id];
-    onChange({ paidShares });
-  };
-
   const removeExpense = (e: Expense) => {
     const paidShares = { ...data.paidShares };
     delete paidShares[e.id];
@@ -402,7 +393,7 @@ function ExpenseList({
       {/* Filter: who has to pay */}
       <div className="flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="คนที่ต้องจ่าย">
         <button onClick={() => setPerson("all")} aria-pressed={person === "all"} className={chip(person === "all")}>
-          👥 ทุกคน
+          ทุกคน
         </button>
         {members.map((m) => (
           <button key={m.id} onClick={() => setPerson(m.id)} aria-pressed={person === m.id} className={chip(person === m.id)}>
@@ -414,8 +405,8 @@ function ExpenseList({
         {(
           [
             ["all", "ทั้งหมด"],
-            ["unpaid", "⏳ ยังจ่ายไม่ครบ"],
-            ["paid", "✅ จ่ายครบแล้ว"],
+            ["unpaid", "ยังจ่ายไม่ครบ"],
+            ["paid", "จ่ายครบแล้ว"],
           ] as const
         ).map(([id, label]) => (
           <button key={id} onClick={() => setStatus(id)} aria-pressed={status === id} className={chip(status === id)}>
@@ -457,7 +448,7 @@ function ExpenseList({
             const paidCount = e.splitAmong.filter((id) => paid(e, id)).length;
             const share = shareOf(e);
             return (
-              <li key={e.id} className="rounded-2xl border border-line bg-white p-3 shadow-sm">
+              <li key={e.id} className="card-fill-hover rounded-2xl bg-surface/60 p-3">
                 <div className="flex items-start gap-2">
                   <span aria-hidden className="mt-0.5 shrink-0">
                     {src.icon}
@@ -465,7 +456,7 @@ function ExpenseList({
                   <div className="min-w-0 flex-1">
                     <p className="font-medium leading-snug">{e.title}</p>
                     <p className="text-xs text-ink-soft">
-                      {e.selfPaid ? "👥 จ่ายกันเอง" : `🙋 ${name(e.paidBy)} จ่ายแทนก่อน`} · หาร {e.splitAmong.length} คน
+                      {e.selfPaid ? "จ่ายกันเอง" : `${name(e.paidBy)} จ่ายแทนก่อน`} · หาร {e.splitAmong.length} คน
                       {e.date && ` · ${formatDate(e.date)}`}
                     </p>
                     {booking?.payment.priceType === "perPerson" && (
@@ -484,7 +475,7 @@ function ExpenseList({
                   {isManual && <DeleteButton size="sm" label={`ลบ ${e.title}`} onConfirm={() => removeExpense(e)} />}
                 </div>
 
-                {/* Who has paid their share — tap to tick */}
+                {/* Who has paid their share (display only) */}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <span className="text-[11px] text-ink-soft">
                     จ่ายแล้ว {paidCount}/{e.splitAmong.length} · คนละ {money(share, e.currency)}
@@ -504,18 +495,14 @@ function ExpenseList({
                         {m.emoji} {m.name} · ออกก่อน
                       </span>
                     ) : (
-                      <button
+                      <span
                         key={id}
-                        onClick={() => togglePaid(e, id)}
-                        disabled={readOnly}
-                        aria-pressed={done}
-                        aria-label={`${m.name} ${done ? "จ่ายแล้ว" : "ยังไม่จ่าย"} — แตะเพื่อเปลี่ยน`}
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition ${
-                          done ? "bg-done text-done-ink" : "bg-alert text-alert-ink hover:brightness-95"
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          done ? "bg-done text-done-ink" : "bg-alert text-alert-ink"
                         } ${focus ? "ring-2 ring-ink/40" : ""}`}
                       >
                         {m.emoji} {m.name} {done ? "✓" : "○"}
-                      </button>
+                      </span>
                     );
                   })}
                 </div>

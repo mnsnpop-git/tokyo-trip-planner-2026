@@ -1,14 +1,17 @@
 "use client";
 
 import { useReadOnly } from "./ReadOnly";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   EMPTY_WISH,
   WISH_LEVELS,
   formatDayTab,
+  activePlace,
   hasGot,
+  wishBought,
   wishDoneFor,
   wishlistExpenses,
+  sumThb,
   uid,
   wishTotal,
   type Activity,
@@ -43,6 +46,9 @@ export function Wishlist({
   days,
   activities,
   currentMemberId,
+  thbPerJpy,
+  focusActivityId,
+  onOpenActivity,
   onSaveItem,
   onDeleteItem,
   onSaveTag,
@@ -54,6 +60,12 @@ export function Wishlist({
   days: Day[];
   activities: Activity[];
   currentMemberId: string;
+  /** For showing the amount bought in baht. */
+  thbPerJpy: number;
+  /** Highlight (and scroll to) the wishes linked to this activity. */
+  focusActivityId: string | null;
+  /** Go to this activity in the Trip Planner. */
+  onOpenActivity: (activityId: string) => void;
   onSaveItem: (w: WishItem) => void;
   onDeleteItem: (id: string) => void;
   onSaveTag: (t: WishTag) => void;
@@ -62,8 +74,12 @@ export function Wishlist({
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tagFilter, setTagFilter] = useState<string>("all");
-  const [personFilter, setPersonFilter] = useState<string>("all");
-  const [hideGot, setHideGot] = useState(false);
+  // Filters, like the Checklist page: whose wishes (one person or "all"), bought or not, type, day, activity.
+  // Opened from an activity's badge: start on everyone, so its items aren't filtered out.
+  const [person, setPerson] = useState<string>(() => (focusActivityId ? "all" : currentMemberId));
+  const [status, setStatus] = useState<"all" | "todo" | "bought">("all");
+  const [dayFilter, setDayFilter] = useState<string>("all");
+  const [activityFilter, setActivityFilter] = useState<string>("all");
   const [managingTags, setManagingTags] = useState(false);
 
   const memberById = new Map(members.map((m) => [m.id, m]));
@@ -74,16 +90,45 @@ export function Wishlist({
   const me = memberById.get(currentMemberId);
   const myWants = items.filter((w) => w.wantedBy.includes(currentMemberId));
   const myGot = myWants.filter((w) => hasGot(w, currentMemberId)).length;
-  const expenses = wishlistExpenses({ wishlist: items });
-  const spentByCurrency = (c: Currency) => expenses.filter((e) => e.currency === c).reduce((s, e) => s + e.amount, 0);
+  // Bought = every person who wants it has got theirs.
+  const bought = items.filter(wishBought).length;
+  const spentThb = sumThb(wishlistExpenses({ wishlist: items }), thbPerJpy);
   const done = (w: WishItem) => wishDoneFor(w, currentMemberId);
+  /** Bought for the person being viewed, or by everyone who wants it in the "all" view. */
+  const boughtFor = (w: WishItem) => (person === "all" ? wishBought(w) : hasGot(w, person));
+  const wantsOf = (id: string) => items.filter((w) => w.wantedBy.includes(id));
+
+  // Only activities some wish is linked to, in trip order.
+  const linked = new Set(items.map((w) => w.activityId));
+  const activitiesWithWishes = activities
+    .filter((a) => linked.has(a.id) && dayIndex.has(a.dayId))
+    .sort((a, b) => dayIndex.get(a.dayId)! - dayIndex.get(b.dayId)! || a.time.localeCompare(b.time));
+
+  // Everything except the status filter (for the counts on the status chips).
+  const inScope = items
+    .filter((w) => tagFilter === "all" || w.tags.includes(tagFilter))
+    .filter((w) => person === "all" || w.wantedBy.includes(person))
+    .filter((w) => dayFilter === "all" || activityById.get(w.activityId)?.dayId === dayFilter)
+    .filter((w) => activityFilter === "all" || w.activityId === activityFilter);
 
   const shown = items
     .filter((w) => tagFilter === "all" || w.tags.includes(tagFilter))
-    .filter((w) => personFilter === "all" || w.wantedBy.includes(personFilter))
-    .filter((w) => !hideGot || !done(w))
+    .filter((w) => person === "all" || w.wantedBy.includes(person))
+    .filter((w) => dayFilter === "all" || activityById.get(w.activityId)?.dayId === dayFilter)
+    .filter((w) => activityFilter === "all" || w.activityId === activityFilter)
+    .filter((w) => status === "all" || (status === "bought") === boughtFor(w))
     // Not-yet-got (for this profile) first, then most wanted, then by name.
     .sort((a, b) => Number(done(a)) - Number(done(b)) || b.level - a.level || a.name.localeCompare(b.name));
+
+  // Opened from an activity's "มีของที่ต้องซื้อ" badge: scroll to its first item still to buy.
+  const focusTarget = focusActivityId
+    ? (shown.find((w) => w.activityId === focusActivityId && !wishBought(w)) ?? shown.find((w) => w.activityId === focusActivityId))
+    : undefined;
+  const focusTargetId = focusTarget?.id;
+  useEffect(() => {
+    if (!focusTargetId) return;
+    document.getElementById(`wish-${focusTargetId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusTargetId]);
 
   /** Tick/untick one person's item; the payer is that person (pay own) or whoever is signed in (paying for them). */
   const toggleGot = (w: WishItem, memberId: string) => {
@@ -99,64 +144,126 @@ export function Wishlist({
   return (
     <section aria-label="Wishlist" className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-line bg-white p-3 shadow-sm">
-          <p className="text-xs text-ink-soft">🛍️ Wishlist</p>
-          <p className="mt-0.5 text-2xl font-bold">{items.length}</p>
-        </div>
-        <div className="rounded-2xl border border-line bg-white p-3 shadow-sm">
-          <p className="text-xs text-ink-soft">✅ {me ? `${me.emoji} My` : "My"} got</p>
-          <p className="mt-0.5 text-2xl font-bold">
-            {myGot}/{myWants.length}
-          </p>
-          <Progress done={myGot} total={myWants.length} className="mt-1 [&>span]:hidden" />
-        </div>
-        <div className="col-span-2 rounded-2xl border border-line bg-white p-3 shadow-sm sm:col-span-1">
-          <p className="text-xs text-ink-soft">💴 Spent (in Budget)</p>
-          <p className="mt-0.5 text-2xl font-bold">
-            {money(spentByCurrency("JPY"), "JPY")}
-            {spentByCurrency("THB") > 0 && <span className="ml-2 text-base">+ {money(spentByCurrency("THB"), "THB")}</span>}
-          </p>
-        </div>
+        <WishStat label="ทั้งหมด" value={items.length} />
+        <WishStat label="ซื้อแล้ว" value={bought} total={items.length} />
+        <WishStat label="ยังไม่ซื้อ" value={items.length - bought} />
+        <WishStat label={`${me ? `${me.emoji} ` : ""}ฉันซื้อแล้ว`} value={myGot} total={myWants.length} />
+        <WishStat label={`${me ? `${me.emoji} ` : ""}ฉันยังไม่ซื้อ`} value={myWants.length - myGot} />
+        <WishStat label="ยอดที่ซื้อแล้ว (THB)" value={money(spentThb, "THB")} />
       </div>
 
-      {/* Filters */}
+      {/* Filters — chip rows like the Checklist page; one tap each. */}
       <div className="space-y-2">
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          <FilterChip active={tagFilter === "all"} onClick={() => setTagFilter("all")}>
-            All
-          </FilterChip>
+        <ChipRow label="ของใคร">
+          {members.map((m) => {
+            const list = wantsOf(m.id);
+            const n = list.filter((w) => hasGot(w, m.id)).length;
+            const all = list.length > 0 && n === list.length;
+            return (
+              <Chip key={m.id} active={person === m.id} tone={all ? "done" : undefined} onClick={() => setPerson(m.id)}>
+                {m.emoji} {m.id === currentMemberId ? "ของฉัน" : m.name} {n}/{list.length}
+                {all && " ✓"}
+              </Chip>
+            );
+          })}
+          <Chip active={person === "all"} onClick={() => setPerson("all")}>
+            ทั้งหมด {items.length}
+          </Chip>
+        </ChipRow>
+
+        <ChipRow label="สถานะ">
+          {(
+            [
+              ["all", "ทั้งหมด"],
+              ["todo", "ยังไม่ซื้อ"],
+              ["bought", "ซื้อแล้ว"],
+            ] as const
+          ).map(([id, label]) => (
+            <Chip key={id} active={status === id} onClick={() => setStatus(id)}>
+              {label} {id === "all" ? "" : inScope.filter((w) => (id === "bought") === boughtFor(w)).length}
+            </Chip>
+          ))}
+        </ChipRow>
+
+        <ChipRow label="ประเภท">
+          <Chip active={tagFilter === "all"} onClick={() => setTagFilter("all")}>
+            ทุกประเภท
+          </Chip>
           {tags.map((t) => (
-            <FilterChip key={t.id} active={tagFilter === t.id} onClick={() => setTagFilter(t.id)}>
+            <Chip key={t.id} active={tagFilter === t.id} onClick={() => setTagFilter(t.id)}>
               {t.icon} {t.label}
-            </FilterChip>
+            </Chip>
           ))}
           <IconButton
             icon={managingTags ? "close" : "edit"}
-            label={managingTags ? "Close tag editor" : "Edit tags"}
+            size="sm"
+            label={managingTags ? "ปิดการแก้ไขประเภท" : "แก้ไขประเภท"}
             onClick={() => setManagingTags((v) => !v)}
             aria-expanded={managingTags}
           />
-        </div>
+        </ChipRow>
         {managingTags && <TagManager tags={tags} items={items} onSave={onSaveTag} onDelete={onDeleteTag} />}
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <select
-            aria-label="Filter by person"
-            value={personFilter}
-            onChange={(e) => setPersonFilter(e.target.value)}
-            className="rounded-xl border border-line bg-surface/60 px-3 py-1.5 text-base sm:text-sm"
-          >
-            <option value="all">👥 Everyone</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.emoji} {m.name} wants
-              </option>
-            ))}
-          </select>
-          <label className="flex cursor-pointer items-center gap-1.5 text-ink-soft">
-            <input type="checkbox" checked={hideGot} onChange={(e) => setHideGot(e.target.checked)} className="h-4 w-4" />
-            Hide got
-          </label>
-          <IconButton icon="add" label="Add wish" onClick={openNew} className="ml-auto" />
+
+        {activitiesWithWishes.length > 0 && (
+          <ChipRow label="วัน">
+            <Chip
+              active={dayFilter === "all"}
+              onClick={() => {
+                setDayFilter("all");
+                setActivityFilter("all");
+              }}
+            >
+              ทุกวัน
+            </Chip>
+            {days
+              .filter((d) => activitiesWithWishes.some((a) => a.dayId === d.id))
+              .map((d) => (
+                <Chip
+                  key={d.id}
+                  active={dayFilter === d.id}
+                  onClick={() => {
+                    setDayFilter(d.id);
+                    setActivityFilter("all");
+                  }}
+                >
+                  DAY {(dayIndex.get(d.id) ?? 0) + 1} · {formatDayTab(d.date)}
+                </Chip>
+              ))}
+          </ChipRow>
+        )}
+
+        {/* Activities appear once a day is picked, so the row stays short. */}
+        {dayFilter !== "all" && (
+          <ChipRow label="กิจกรรม">
+            <Chip active={activityFilter === "all"} onClick={() => setActivityFilter("all")}>
+              ทุกกิจกรรม
+            </Chip>
+            {activitiesWithWishes
+              .filter((a) => a.dayId === dayFilter)
+              .map((a) => (
+                <Chip key={a.id} active={activityFilter === a.id} onClick={() => setActivityFilter(a.id)}>
+                  {a.time} {activePlace(a).title}
+                </Chip>
+              ))}
+          </ChipRow>
+        )}
+
+        <div className="flex items-center gap-3">
+          {(person !== currentMemberId || status !== "all" || tagFilter !== "all" || dayFilter !== "all") && (
+            <button
+              onClick={() => {
+                setPerson(currentMemberId);
+                setStatus("all");
+                setTagFilter("all");
+                setDayFilter("all");
+                setActivityFilter("all");
+              }}
+              className="text-xs font-medium text-baby-ink hover:underline"
+            >
+              ล้างตัวกรอง
+            </button>
+          )}
+          <IconButton icon="add" label="เพิ่ม wishlist" onClick={openNew} className="ml-auto" />
         </div>
       </div>
 
@@ -177,13 +284,15 @@ export function Wishlist({
               <WishRow
                 key={w.id}
                 item={w}
+                highlight={!!focusActivityId && w.activityId === focusActivityId}
                 tags={w.tags.map((id) => tagById.get(id)).filter((t): t is WishTag => Boolean(t))}
                 wanters={w.wantedBy.map((id) => memberById.get(id)).filter((m): m is Member => Boolean(m))}
                 where={
                   activity && di !== undefined
-                    ? `DAY ${di + 1} · ${formatDayTab(days[di].date)} · ${activity.time} · ${activity.title}`
+                    ? `DAY ${di + 1} · ${formatDayTab(days[di].date)} · ${activity.time} · ${activePlace(activity).title}`
                     : ""
                 }
+                onOpenWhere={activity && di !== undefined ? () => onOpenActivity(activity.id) : undefined}
                 currentMemberId={currentMemberId}
                 payers={payers.map((m) => m.emoji).join(" ")}
                 onToggleGot={(memberId) => toggleGot(w, memberId)}
@@ -214,13 +323,34 @@ export function Wishlist({
   );
 }
 
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+/** One sideways-scrolling row of filter chips. */
+function ChipRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    // The label is for screen readers only; the chips speak for themselves.
+    <div role="group" aria-label={label} className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+      {children}
+    </div>
+  );
+}
+
+function Chip({
+  active,
+  tone,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  /** Everything on this person's list is bought. */
+  tone?: "done";
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-        active ? "bg-ink text-white" : "bg-surface text-ink-soft hover:bg-baby hover:text-baby-ink"
+      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition ${
+        active ? "bg-ink text-white" : tone === "done" ? "bg-done text-done-ink" : "bg-surface text-ink-soft hover:bg-baby"
       }`}
     >
       {children}
@@ -230,22 +360,28 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 
 function WishRow({
   item: w,
+  highlight,
   tags,
   wanters,
   where,
   currentMemberId,
   payers,
+  onOpenWhere,
   onToggleGot,
   onEdit,
   onDelete,
 }: {
   item: WishItem;
+  /** Linked to the activity the Wishlist was opened from. */
+  highlight: boolean;
   tags: WishTag[];
   wanters: Member[];
   where: string;
   currentMemberId: string;
   /** Emoji of everyone who paid so far. */
   payers: string;
+  /** Jump to the linked activity in the Trip Planner. */
+  onOpenWhere?: () => void;
   onToggleGot: (memberId: string) => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -256,7 +392,12 @@ function WishRow({
   const gotCount = wanters.filter((m) => hasGot(w, m.id)).length;
   const readOnly = useReadOnly();
   return (
-    <li className={`rounded-2xl border p-3 shadow-sm transition ${done ? "border-done-ink/25 bg-done/30" : "border-line bg-white"}`}>
+    <li
+      id={`wish-${w.id}`}
+      className={`card-fill-hover scroll-mt-28 rounded-2xl p-3 ${done ? "bg-done/50" : "bg-surface/60"} ${
+        highlight ? "ring-2 ring-baby-ink ring-offset-2" : ""
+      }`}
+    >
       <div className="flex items-start gap-3">
         {iWant ? (
           <input
@@ -284,13 +425,15 @@ function WishRow({
             )}
           </div>
 
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-            {tags.map((t) => (
-              <span key={t.id} className="rounded-full bg-surface px-2 py-0.5 text-ink-soft">
-                {t.icon} {t.label}
-              </span>
-            ))}
-          </div>
+          {where && onOpenWhere && (
+            <button
+              onClick={onOpenWhere}
+              title="ไปที่กิจกรรมใน Trip Planner"
+              className="mt-0.5 block max-w-full truncate text-left text-xs font-medium text-baby-ink hover:underline"
+            >
+              📍 {where} ›
+            </button>
+          )}
 
           {/* Each person's status — tap to tick for a friend you bought it for. */}
           {wanters.length > 0 && (
@@ -305,7 +448,7 @@ function WishRow({
                     aria-pressed={got}
                     aria-label={`${m.name}: ${got ? "got" : "not yet"}`}
                     className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition ${
-                      got ? "bg-done text-done-ink" : "bg-surface text-ink-soft hover:bg-baby"
+                      got ? "bg-done text-done-ink" : "bg-white text-ink-soft hover:bg-baby"
                     } ${m.id === currentMemberId ? "ring-1 ring-ink/30" : ""}`}
                   >
                     {m.emoji} {m.name} {got ? "✓" : "○"}
@@ -315,21 +458,25 @@ function WishRow({
             </div>
           )}
 
-          {where && <p className="mt-1 truncate text-xs text-baby-ink">📍 {where}</p>}
           {w.note && <p className="mt-1 text-sm text-ink-soft">{w.note}</p>}
           {w.price > 0 && (
             <p className="mt-1 text-xs">
-              💴 {priceText(w)}
+              {priceText(w)}
               {w.selfPaid ? (
-                <span className="text-ink-soft"> · 👥 จ่ายกันเอง</span>
+                <span className="text-ink-soft"> · จ่ายกันเอง</span>
               ) : (
-                payers && <span className="text-ink-soft"> · 🙋 {payers} จ่ายแทนก่อน</span>
+                payers && <span className="text-ink-soft"> · {payers} จ่ายแทนก่อน</span>
               )}
             </p>
           )}
           {gotCount > 0 && w.price === 0 && <p className="mt-1 text-[11px] text-ink-soft">Add a price to include it in Budget</p>}
         </div>
         <span className="flex shrink-0 items-center gap-0.5">
+          {tags.map((t) => (
+            <span key={t.id} title={t.label} className="mr-0.5 whitespace-nowrap rounded-full bg-white px-2 py-0.5 text-[11px] text-ink-soft">
+              {t.icon} {t.label}
+            </span>
+          ))}
           <IconButton icon="edit" label={`Edit ${w.name}`} onClick={onEdit} />
           <DeleteButton label={`Delete ${w.name}`} onConfirm={onDelete} />
         </span>
@@ -636,7 +783,7 @@ function WishForm({
           />
           {form.wantedBy.length > 0 && (
             <div>
-              <span className={labelClass}>✅ Who got it (adds to Budget when it has a price)</span>
+              <span className={labelClass}>Who got it (adds to Budget when it has a price)</span>
               <ul className="space-y-1.5">
                 {form.wantedBy.map((id) => {
                   const m = members.find((x) => x.id === id);
@@ -695,5 +842,19 @@ function WishForm({
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** One summary card; with `total`, shows "value/total" and a progress bar. */
+function WishStat({ label, value, total }: { label: string; value: number | string; total?: number }) {
+  return (
+    <div className="card-fill-hover rounded-2xl bg-surface/60 p-3">
+      <p className="truncate text-xs text-ink-soft">{label}</p>
+      <p className="mt-0.5 text-2xl font-bold">
+        {value}
+        {total !== undefined && <span className="text-base font-semibold text-ink-soft">/{total}</span>}
+      </p>
+      {total !== undefined && <Progress done={Number(value)} total={total} className="mt-1 [&>span]:hidden" />}
+    </div>
   );
 }

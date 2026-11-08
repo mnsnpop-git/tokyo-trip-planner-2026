@@ -84,7 +84,7 @@ export function ImagePicker({
   idPrefix,
   images,
   onUpdate,
-  label = "📷 รูปสถานที่",
+  label = "รูปสถานที่",
 }: {
   idPrefix: string;
   images: string[];

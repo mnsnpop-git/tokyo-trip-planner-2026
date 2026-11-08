@@ -7,7 +7,7 @@ import {
   activePlace,
   categoryBadge,
   findCategory,
-  formatDate,
+  formatDayLabel,
   needsBooking,
   type Flight,
   type Hotel,
@@ -89,12 +89,12 @@ export function TripSummary({
         <Stat label="กิจกรรมทั้งหมด" value={`${ordered.length}`} unit="รายการ" />
         <Stat label="ไปแล้ว" value={`${visited}/${ordered.length}`} progress={ordered.length ? visited / ordered.length : 0} />
         <Stat
-          label="🎫 จองแล้ว"
+          label="จองแล้ว"
           value={`${booked}/${toBook.length}`}
           progress={toBook.length ? booked / toBook.length : undefined}
         />
         <Stat label="มีแผนสำรอง" value={`${withBackup}`} unit={onBackup ? `· ใช้อยู่ ${onBackup}` : "รายการ"} />
-        <Stat label="💴 ค่าใช้จ่ายกิจกรรม" value={baht(costOfList(ordered))} />
+        <Stat label="ค่าใช้จ่ายกิจกรรม" value={baht(costOfList(ordered))} />
       </div>
 
       <TravelSection
@@ -111,8 +111,8 @@ export function TripSummary({
         <div role="tablist" aria-label="สรุปตาม" className="inline-flex rounded-full bg-white/80 p-1 shadow-sm">
           {(
             [
-              ["day", "📅 ตามวัน"],
-              ["category", "🏷️ ตามประเภท"],
+              ["day", "ตามวัน"],
+              ["category", "ตามประเภท"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -154,7 +154,7 @@ export function TripSummary({
             const isOpen = !collapsed.has(day.id);
             const listId = `summary-day-${day.id}`;
             return (
-              <article key={day.id} className="rounded-3xl border border-line bg-white/80 p-4 shadow-sm">
+              <article key={day.id} className="card-hover rounded-3xl border border-line bg-white/80 p-4 shadow-sm">
                 <header className="flex items-center gap-2">
                   <button
                     onClick={() => toggleDay(day.id)}
@@ -172,10 +172,10 @@ export function TripSummary({
                     </svg>
                     <span className="rounded-full bg-ink px-3 py-1 text-xs font-semibold tracking-wide text-white">DAY {i + 1}</span>
                     <h3 className="font-semibold">{day.title}</h3>
-                    <span className="text-sm text-ink-soft">{formatDate(day.date)}</span>
+                    <span className="text-sm text-ink-soft">{formatDayLabel(day.date)}</span>
                     {!isOpen && <span className="text-xs text-ink-soft">· {items.length} กิจกรรม</span>}
                     {costOfList(items) > 0 && (
-                      <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">💴 {baht(costOfList(items))}</span>
+                      <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">{baht(costOfList(items))}</span>
                     )}
                   </button>
                   <button
@@ -226,14 +226,14 @@ export function TripSummary({
             if (items.length === 0) return null;
             const done = items.filter((a) => a.visited).length;
             return (
-              <article key={c.id || "unknown"} className="rounded-3xl border border-line bg-white/80 p-4 shadow-sm">
+              <article key={c.id || "unknown"} className="card-hover rounded-3xl border border-line bg-white/80 p-4 shadow-sm">
                 <header className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-3 py-1 text-sm font-semibold ${categoryBadge(c)}`}>
                     {c.icon} {c.label}
                   </span>
                   <span className="text-sm text-ink-soft">{items.length} รายการ</span>
                   {costOfList(items) > 0 && (
-                    <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">💴 {baht(costOfList(items))}</span>
+                    <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">{baht(costOfList(items))}</span>
                   )}
                 </header>
                 <Progress done={done} total={items.length} />
@@ -272,14 +272,14 @@ export function TripSummary({
 
 function Stat({ label, value, unit, progress }: { label: string; value: string; unit?: string; progress?: number }) {
   return (
-    <div className="rounded-2xl border border-line bg-white/80 p-3 shadow-sm">
+    <div className="card-fill-hover rounded-2xl bg-surface/60 p-3">
       <p className="text-xs text-ink-soft">{label}</p>
       <p className="mt-0.5 text-2xl font-bold">
         {value}
         {unit && <span className="ml-1 text-xs font-normal text-ink-soft">{unit}</span>}
       </p>
       {progress !== undefined && (
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface">
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white">
           <div className="h-full rounded-full bg-done-ink/70" style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
       )}
@@ -323,15 +323,15 @@ function SummaryRow({
               place.subtasks.every((t) => t.done) ? "bg-done text-done-ink" : "bg-surface text-ink-soft"
             }`}
           >
-            🗺️ {place.subtasks.filter((t) => t.done).length}/{place.subtasks.length}
+            {place.subtasks.filter((t) => t.done).length}/{place.subtasks.length}
           </span>
         )}
         {needsBooking(a) && (
-          <span className="shrink-0 rounded-full bg-alert px-2 py-0.5 text-[11px] font-medium text-alert-ink">⏳ ยังไม่จอง</span>
+          <span className="shrink-0 rounded-full bg-pending px-2 py-0.5 text-[11px] font-medium text-pending-ink">ยังไม่จอง</span>
         )}
         {cost > 0 && <span className="shrink-0 text-xs font-medium">{baht(cost)}</span>}
         {onBackup && (
-          <span className="shrink-0 rounded-full bg-alt px-2 py-0.5 text-[11px] font-medium text-alt-ink">🔁 สำรอง</span>
+          <span className="shrink-0 rounded-full bg-alt px-2 py-0.5 text-[11px] font-medium text-alt-ink">สำรอง</span>
         )}
       </button>
     </li>

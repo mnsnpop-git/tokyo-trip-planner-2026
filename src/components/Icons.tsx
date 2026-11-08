@@ -50,7 +50,23 @@ export function CheckIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-const ICONS = { edit: PencilIcon, delete: TrashIcon, add: PlusIcon, close: XIcon, confirm: CheckIcon };
+export function EyeIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 20 20" className={className} fill="currentColor">
+      <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+      <path
+        fillRule="evenodd"
+        d="M.66 10.59a1.5 1.5 0 0 1 0-1.18C2.2 5.73 5.8 3.5 10 3.5s7.8 2.23 9.34 5.91a1.5 1.5 0 0 1 0 1.18C17.8 14.27 14.2 16.5 10 16.5S2.2 14.27.66 10.59ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+const ICONS = { edit: PencilIcon, delete: TrashIcon, add: PlusIcon, close: XIcon, confirm: CheckIcon, view: EyeIcon };
+
+/** Icons guests still see (they only look, never change anything). */
+const GUEST_ICONS = new Set<keyof typeof ICONS>(["close", "view"]);
 
 type Tone = "ghost" | "danger" | "solid";
 
@@ -84,8 +100,8 @@ export function IconButton({
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "type" | "className" | "children">) {
   const readOnly = useReadOnly();
   const Icon = ICONS[icon];
-  // Guests only see close buttons; every add/edit/delete/confirm action is hidden.
-  if (readOnly && icon !== "close") return null;
+  // Guests only see close/view buttons; every add/edit/delete/confirm action is hidden.
+  if (readOnly && !GUEST_ICONS.has(icon)) return null;
   return (
     <button
       type={type}

@@ -26,6 +26,7 @@ import {
   SAMPLE_TRIP,
   addDays,
   formatDate,
+  formatDateRange,
   formatDayTab,
   memberUsage,
   expensesByActivity,
@@ -41,6 +42,7 @@ import {
   normalizeHotels,
   sortDays,
   uid,
+  wishesToBuyByActivity,
   type Activity,
   type Category,
   type Day,
@@ -253,7 +255,33 @@ export function TripPlanner() {
     })();
   }, [sync.status, trip, memberAuth, uploadImage, setTrip]);
 
-  const [view, setView] = useState<View>("plan");
+  const [view, setViewState] = useState<View>("plan");
+  /** Activity whose wishes the Wishlist should point at (set by the "มีของที่ต้องซื้อ" badge). */
+  const [wishFocus, setWishFocus] = useState<string | null>(null);
+  const setView = (v: View) => {
+    setWishFocus(null);
+    setViewState(v);
+  };
+  const openWishlistAt = (activityId: string) => {
+    setViewState("wishlist");
+    setWishFocus(activityId);
+  };
+  /** Activity to scroll to once the Trip Planner shows it (from a wish's "📍" link). */
+  const [planFocus, setPlanFocus] = useState<string | null>(null);
+  const openActivity = (activityId: string) => {
+    const a = trip.activities.find((x) => x.id === activityId);
+    if (!a) return;
+    setView("plan");
+    setSelectedDay(a.dayId);
+    setPlanFocus(activityId);
+  };
+  useEffect(() => {
+    if (!planFocus || view !== "plan") return;
+    const el = document.getElementById(`activity-${planFocus}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    el?.animate([{ boxShadow: "0 0 0 3px var(--color-baby-ink)" }, { boxShadow: "0 0 0 0 transparent" }], { duration: 1600 });
+    setPlanFocus(null); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [planFocus, view]);
   const [menuOrder, setMenuOrder] = useState<View[]>(loadMenuOrder);
 
   useEffect(() => {
@@ -422,6 +450,7 @@ export function TripPlanner() {
       <ProfileSelect
         tripName={trip.name}
         tripYear={tripYear}
+        tripDates={formatDateRange(trip.days.map((d) => d.date))}
         members={trip.members}
         // Until the shared trip has loaded, the members are only this browser's copy (or the default).
         loading={sync.status === "connecting"}
@@ -452,7 +481,7 @@ export function TripPlanner() {
       )}
       {isGuest && (
         <p className="bg-ink px-4 py-1.5 text-center text-xs font-medium text-white">
-          👀 Guest Mode · ดูอย่างเดียว — เข้าโปรไฟล์ด้วย PIN เพื่อแก้ไข
+          Guest Mode · ดูอย่างเดียว — เข้าโปรไฟล์ด้วย PIN เพื่อแก้ไข
         </p>
       )}
       {/* Header + hamburger stay frozen at the top while the page scrolls. */}
@@ -513,7 +542,7 @@ export function TripPlanner() {
 
       {sync.replaced && !isGuest && (
         <div role="status" className="mx-auto mt-4 flex max-w-6xl flex-wrap items-center gap-2 rounded-2xl bg-baby px-4 py-2 text-sm text-baby-ink sm:mx-6 lg:mx-auto">
-          <p className="min-w-0 flex-1">☁️ เปิดข้อมูลล่าสุดที่ทุกคนใช้ร่วมกันแล้ว — ข้อมูลเดิมในเครื่องนี้สำรองไว้</p>
+          <p className="min-w-0 flex-1">เปิดข้อมูลล่าสุดที่ทุกคนใช้ร่วมกันแล้ว — ข้อมูลเดิมในเครื่องนี้สำรองไว้</p>
           <button
             onClick={sync.restoreReplaced}
             className="rounded-full bg-white px-3 py-1 text-xs font-medium text-baby-ink shadow-sm hover:bg-white/80"
@@ -570,6 +599,8 @@ export function TripPlanner() {
                 thbPerJpy={trip.thbPerJpy}
                 flights={trip.flights}
                 hotels={trip.hotels}
+                wishesToBuy={wishesToBuyByActivity(trip.wishlist)}
+                onOpenWishlist={openWishlistAt}
                 onSave={saveActivity}
                 onDelete={deleteActivity}
                 onUpdateDay={updateDay}
@@ -601,6 +632,9 @@ export function TripPlanner() {
             days={trip.days}
             activities={trip.activities}
             currentMemberId={me.id}
+            thbPerJpy={trip.thbPerJpy}
+            focusActivityId={wishFocus}
+            onOpenActivity={openActivity}
             onSaveItem={saveWish}
             onDeleteItem={deleteWish}
             onSaveTag={saveWishTag}
@@ -719,10 +753,10 @@ function TripName({ name, onChange }: { name: string; onChange: (name: string) =
 }
 
 const SYNC_TEXT: Record<SyncStatus, string> = {
-  connecting: "⏳ กำลังโหลดข้อมูลล่าสุด…",
+  connecting: "กำลังโหลดข้อมูลล่าสุด…",
   local: "", // no database connected: show nothing
-  synced: "☁️ ซิงก์แล้ว",
-  saving: "⏳ กำลังบันทึก…",
+  synced: "ซิงก์แล้ว",
+  saving: "กำลังบันทึก…",
   offline: "⚠️ ออฟไลน์ — จะซิงก์ให้เมื่อต่อเน็ตได้",
   tooLarge: "⚠️ ข้อมูลใหญ่เกิน (รูปเยอะ) — ซิงก์ไม่ได้",
   denied: "⚠️ บันทึกไม่ได้: PIN ไม่ถูกต้อง — ออกจากระบบแล้วเข้าใหม่",
@@ -741,7 +775,7 @@ function SyncBadge({ status, updatedAt, guest }: { status: SyncStatus; updatedAt
       aria-live="polite"
       className={`truncate text-[11px] ${warn ? "font-medium text-alert-ink" : "text-ink-soft"}`}
     >
-      {guest && status === "synced" ? "👀 ดูอย่างเดียว · อัปเดตอัตโนมัติ" : SYNC_TEXT[status]}
+      {guest && status === "synced" ? "ดูอย่างเดียว · อัปเดตอัตโนมัติ" : SYNC_TEXT[status]}
       {time}
     </p>
   );

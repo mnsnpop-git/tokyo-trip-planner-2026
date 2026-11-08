@@ -72,7 +72,7 @@ export function SubTaskList({
           type="button"
           onClick={() => setEditing("new")}
           aria-label={`เพิ่มกิจกรรมย่อยใน ${placeTitle}`}
-          className="mt-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-ink-soft transition hover:bg-surface hover:text-baby-ink"
+          className="mt-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-ink-soft transition hover:bg-white hover:text-baby-ink"
         >
           <PlusIcon className="h-3 w-3" />
           เพิ่มกิจกรรมย่อย
@@ -100,7 +100,7 @@ export function SubTaskList({
           >
             <path d="M7 4l7 6-7 6V4z" />
           </svg>
-          <span className="shrink-0">🗺️ กิจกรรมย่อย</span>
+          <span className="shrink-0">กิจกรรมย่อย</span>
           <span className="shrink-0 font-medium text-ink-soft">
             {done}/{subtasks.length}
           </span>
@@ -108,7 +108,7 @@ export function SubTaskList({
             {summary.map((p) => (
               <span
                 key={p.id}
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${p.left > 0 ? PRIORITY_BADGE[p.id] : "bg-surface text-ink-soft"}`}
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${p.left > 0 ? PRIORITY_BADGE[p.id] : "bg-white text-ink-soft"}`}
               >
                 {p.label} {p.left > 0 ? `เหลือ ${p.left}` : "ครบ ✓"}
               </span>
@@ -247,7 +247,7 @@ function SubTaskForm({
                   t.priority === p.id ? (p.id === "must" ? "bg-ink text-white" : "bg-baby-ink text-white") : "bg-white text-ink-soft"
                 }`}
               >
-                {p.id === "must" ? "🔥 Must" : "✨ Nice"}
+                {p.id === "must" ? "Must" : "Nice"}
               </button>
             ))}
           </div>
@@ -282,13 +282,13 @@ function SubTaskForm({
         </div>
         <ImagePicker
           idPrefix="sub"
-          label="📷 รูป"
+          label="รูป"
           images={t.images}
           onUpdate={(update) => setT((x) => ({ ...x, images: update(x.images) }))}
         />
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={t.done} onChange={(e) => setT({ ...t, done: e.target.checked })} className="h-4 w-4 accent-done-ink" />
-          ✅ ทำแล้ว
+          ทำแล้ว
         </label>
         {error && (
           <p role="alert" className="rounded-xl bg-alert px-3 py-2 text-sm font-medium text-alert-ink">

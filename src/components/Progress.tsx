@@ -15,7 +15,7 @@ export function Progress({
   return (
     <div className={`flex items-center gap-2 text-xs text-ink-soft ${className}`}>
       <div
-        className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface"
+        className="h-1.5 flex-1 overflow-hidden rounded-full bg-line"
         role="progressbar"
         aria-label={label}
         aria-valuenow={pct}

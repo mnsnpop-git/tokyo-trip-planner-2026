@@ -32,8 +32,8 @@ export function PayerField({
         <div role="radiogroup" aria-label="การจ่าย" className="flex overflow-hidden rounded-xl border border-line text-sm">
           {(
             [
-              [true, "👥 จ่ายกันเอง"],
-              [false, "🙋 มีคนจ่ายแทนก่อน"],
+              [true, "จ่ายกันเอง"],
+              [false, "มีคนจ่ายแทนก่อน"],
             ] as const
           ).map(([value, label]) => (
             <button

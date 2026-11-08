@@ -1,6 +1,5 @@
 "use client";
 
-import { useReadOnly } from "./ReadOnly";
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { IconButton } from "./Icons";
@@ -12,7 +11,6 @@ import {
   isSafeUrl,
   planName,
   plansOf,
-  requiresBooking,
   updatePlanBooking,
   type Activity,
   type Booking,
@@ -80,7 +78,6 @@ export function Bookings({
   onSave: (a: Activity) => void;
   onOpenDay: (dayId: string) => void;
 }) {
-  const readOnly = useReadOnly();
   const now = useNow();
   const [tab, setTab] = useState<BookingKind | "all">("all");
   const [dayFilter, setDayFilter] = useState("all");
@@ -145,15 +142,6 @@ export function Bookings({
   const urgent = (id: BookingKind | "all") =>
     filtered.filter((e) => statusOf(e) === "todo" && (id === "all" || e.place.booking.kind === id)).length;
 
-  const toggleBooked = (e: Entry) =>
-    onSave(
-      updatePlanBooking(e.activity, e.planIndex, (b) => ({
-        ...b,
-        booked: !b.booked,
-        bookedBy: !b.booked && !b.bookedBy ? currentMemberId : b.bookedBy,
-      })),
-    );
-
   const viewed = all.find((e) => e.key === viewing);
   const edited = all.find((e) => e.key === editing);
 
@@ -178,7 +166,7 @@ export function Bookings({
               {t.label}
               <span className={`min-w-5 rounded-full px-1.5 text-center text-xs ${active ? "bg-white/20" : "bg-white"}`}>{n}</span>
               {u > 0 && (
-                <span title={`ยังไม่จอง ${u} รายการ`} className="min-w-5 rounded-full bg-alert-ink px-1.5 text-center text-xs text-white">
+                <span title={`ยังไม่จอง ${u} รายการ`} className="min-w-5 rounded-full bg-pending-ink px-1.5 text-center text-xs text-white">
                   {u}
                 </span>
               )}
@@ -193,12 +181,12 @@ export function Bookings({
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍 ค้นหากิจกรรม"
+          placeholder="ค้นหากิจกรรม"
           aria-label="ค้นหากิจกรรม"
           className={`${selectClass} col-span-2 sm:col-span-1`}
         />
         <select aria-label="เลือกวัน" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className={selectClass}>
-          <option value="all">📅 ทุกวัน</option>
+          <option value="all">ทุกวัน</option>
           {days.map((d, i) => {
             const n = all.filter((e) => e.day.id === d.id && (showUnused || e.inUse)).length;
             return (
@@ -215,9 +203,9 @@ export function Bookings({
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
           className={selectClass}
         >
-          <option value="all">📋 ทุกสถานะ</option>
-          <option value="notBooked">⏳ ยังไม่จอง</option>
-          <option value="booked">✅ จองแล้ว</option>
+          <option value="all">ทุกสถานะ</option>
+          <option value="notBooked">ยังไม่จอง</option>
+          <option value="booked">จองแล้ว</option>
         </select>
       </div>
 
@@ -250,7 +238,7 @@ export function Bookings({
               ยังไม่มีการจอง — ตั้ง <b>แบบการจอง</b> ได้ที่ไอคอนดินสอของกิจกรรม
             </>
           ) : statusFilter === "notBooked" && !q && dayFilter === "all" ? (
-            "จองครบหมดแล้ว 🎉"
+            "จองครบหมดแล้ว"
           ) : (
             "ไม่มีรายการที่ตรงกับตัวกรอง"
           )}
@@ -281,7 +269,6 @@ export function Bookings({
                     members={members}
                     onView={() => setViewing(e.key)}
                     onEdit={() => setEditing(e.key)}
-                    onToggleBooked={() => toggleBooked(e)}
                   />
                 ))}
               </ul>
@@ -309,7 +296,6 @@ export function Bookings({
           booking={viewed.place.booking}
           members={members}
           start={viewed.start}
-          onToggleBooked={requiresBooking(viewed.place.booking) && !readOnly ? () => toggleBooked(viewed) : undefined}
           onClose={() => setViewing(null)}
         />
       )}
@@ -317,18 +303,19 @@ export function Bookings({
   );
 }
 
+/** Not booked = soft red (book now), not open yet = white outline (just wait), booked = blue. */
 const STATUS_STYLE: Record<Status, string> = {
-  todo: "bg-alert text-alert-ink",
-  upcoming: "bg-surface text-ink-soft",
+  todo: "bg-pending text-pending-ink",
+  upcoming: "border border-dashed border-ink-soft/60 bg-white text-ink-soft",
   booked: "bg-done text-done-ink",
-  walkin: "bg-surface text-ink-soft",
+  walkin: "bg-white text-ink-soft",
 };
 
 const STATUS_BADGE: Record<Status, string> = {
-  todo: "⏳ ยังไม่จอง",
-  upcoming: "⏳ ยังไม่จอง · ยังไม่เปิด",
-  booked: "✅ จองแล้ว",
-  walkin: "🚶 Walk-in",
+  todo: "ยังไม่จอง",
+  upcoming: "ยังไม่จอง · ยังไม่เปิด",
+  booked: "จองแล้ว",
+  walkin: "Walk-in",
 };
 
 function BookingRow({
@@ -339,7 +326,6 @@ function BookingRow({
   members,
   onView,
   onEdit,
-  onToggleBooked,
 }: {
   entry: Entry;
   status: Status;
@@ -349,45 +335,63 @@ function BookingRow({
   members: Member[];
   onView: () => void;
   onEdit: () => void;
-  onToggleBooked: () => void;
 }) {
-  const readOnly = useReadOnly();
   const b = e.place.booking;
   const p = b.payment;
   const by = members.find((m) => m.id === b.bookedBy);
   const hasUrl = b.url && isSafeUrl(b.url) && b.kind !== "walkin";
 
-  let detail: string;
+  let detail = "";
   if (status === "walkin") detail = b.method || "ไปต่อคิวหน้างาน";
-  else if (status === "booked") detail = by ? `จองโดย ${by.emoji} ${by.name}` : "จองแล้ว";
+  else if (status === "booked") detail = "";
   else if (status === "upcoming" && e.opensAt)
     detail = `เปิดจอง ${formatDateTime(e.opensAt)} · ${formatCountdown(e.opensAt.getTime() - now)}`;
   else if (e.opensAt) detail = `เปิดจองแล้วตั้งแต่ ${formatDateTime(e.opensAt)}`;
   else detail = "จองได้เลย";
 
   return (
-    <li className={`relative rounded-2xl border border-line bg-white p-3 shadow-sm ${e.inUse ? "" : "opacity-60"}`}>
-      <IconButton icon="edit" label={`แก้ไขการจอง ${e.place.title}`} onClick={onEdit} className="absolute right-1.5 top-1.5" />
-
-      <div className="flex items-baseline gap-2 pr-8">
-        <span className="shrink-0 font-mono text-sm font-semibold text-ink-soft">{e.activity.time}</span>
-        <p className="min-w-0 font-medium leading-snug">{e.place.title}</p>
-      </div>
-
-      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-        {showStatus && <span className={`rounded-full px-2 py-0.5 font-medium ${STATUS_STYLE[status]}`}>{STATUS_BADGE[status]}</span>}
-        {(e.planIndex > 0 || !e.inUse) && (
-          <span className="rounded-full bg-alt px-2 py-0.5 text-alt-ink">
-            {planName(e.planIndex, e.activity.backups.length)}
-            {e.inUse ? "" : " · ไม่ได้ใช้"}
+    <li className={`card-fill-hover relative rounded-2xl bg-surface/60 p-3 ${e.inUse ? "" : "opacity-60"}`}>
+      {/* Time · title · status, then view/edit. Status is changed in the edit form. */}
+      <div className="-mr-1.5 -mt-1.5 flex items-start gap-2">
+        <p className="min-w-0 flex-1 pt-1.5 leading-snug">
+          <span className="mr-2 font-mono text-sm font-semibold text-ink-soft">{e.activity.time}</span>
+          <span className="font-medium">{e.place.title}</span>
+        </p>
+        {showStatus && (
+          <span className={`mt-1.5 shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
+            {STATUS_BADGE[status]}
           </span>
         )}
-        <span className="min-w-0 text-ink-soft">{detail}</span>
+        <div className="flex shrink-0">
+          <IconButton icon="view" label={`ดูรายละเอียด ${e.place.title}`} onClick={onView} />
+          <IconButton icon="edit" label={`แก้ไขการจอง ${e.place.title}`} onClick={onEdit} />
+        </div>
       </div>
-      {p.required && p.amount > 0 && <p className="mt-1 text-xs">💴 {paymentSummary(p)}</p>}
 
-      <div className="mt-2.5 flex flex-wrap gap-1.5 text-xs">
-        {hasUrl && status !== "booked" && (
+      {(detail || e.planIndex > 0 || !e.inUse) && (
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+          {(e.planIndex > 0 || !e.inUse) && (
+            <span className="rounded-full bg-alt px-2 py-0.5 text-alt-ink">
+              {planName(e.planIndex, e.activity.backups.length)}
+              {e.inUse ? "" : " · ไม่ได้ใช้"}
+            </span>
+          )}
+          {detail && <span className="min-w-0 text-ink-soft">{detail}</span>}
+        </div>
+      )}
+      {((p.required && p.amount > 0) || (status === "booked" && by)) && (
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+          {p.required && p.amount > 0 && <span>{paymentSummary(p)}</span>}
+          {status === "booked" && by && (
+            <span className="text-ink-soft">
+              จองโดย {by.emoji} {by.name}
+            </span>
+          )}
+        </p>
+      )}
+
+      {hasUrl && status !== "booked" && (
+        <div className="mt-2.5 flex text-xs">
           <a
             href={b.url}
             target="_blank"
@@ -396,21 +400,8 @@ function BookingRow({
           >
             🔗 ไปจอง
           </a>
-        )}
-        {requiresBooking(b) && !readOnly && (
-          <button
-            onClick={onToggleBooked}
-            className={`rounded-full px-3.5 py-1.5 font-medium transition ${
-              b.booked ? "bg-surface text-ink-soft hover:bg-alert hover:text-alert-ink" : "bg-done text-done-ink hover:brightness-95"
-            }`}
-          >
-            {b.booked ? "↩︎ ยกเลิกสถานะจอง" : "✓ จองแล้ว"}
-          </button>
-        )}
-        <button onClick={onView} className="rounded-full bg-surface px-3.5 py-1.5 font-medium text-ink hover:bg-baby">
-          👁 รายละเอียด
-        </button>
-      </div>
+        </div>
+      )}
     </li>
   );
 }
@@ -440,7 +431,7 @@ function BookingEditor({
   };
 
   return (
-    <Modal title={`✏️ การจอง · ${e.place.title}`} onClose={onCancel}>
+    <Modal title={`การจอง · ${e.place.title}`} onClose={onCancel}>
       <form noValidate onSubmit={submit} className="space-y-4">
         <p className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
           <span className="rounded-full bg-ink px-2 py-0.5 font-semibold text-white">DAY {e.dayIndex + 1}</span>

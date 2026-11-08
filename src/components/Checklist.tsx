@@ -90,7 +90,7 @@ export function Checklist({
   return (
     <section aria-label="ของที่ต้องเตรียม" className="rounded-3xl border border-line bg-white/80 p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-1.5">
-        <h2 className="text-lg font-semibold">🎒 ของที่ต้องเตรียม</h2>
+        <h2 className="text-lg font-semibold">ของที่ต้องเตรียม</h2>
         <IconButton
           icon="add"
           label="เพิ่มรายการ"
@@ -133,13 +133,13 @@ export function Checklist({
             viewing === "all" ? "bg-ink text-white" : "bg-surface text-ink-soft hover:bg-baby"
           }`}
         >
-          👥 ทั้งหมด {items.length}
+          ทั้งหมด {items.length}
         </button>
       </div>
 
       {viewed && !isMine && (
         <p className="mb-3 rounded-xl bg-surface px-3 py-2 text-xs text-ink-soft">
-          👀 กำลังดูของ {viewed.emoji} {viewed.name} — เปลี่ยนสถานะแทนเพื่อนไม่ได้
+          กำลังดูของ {viewed.emoji} {viewed.name} — เปลี่ยนสถานะแทนเพื่อนไม่ได้
         </p>
       )}
 
@@ -147,9 +147,9 @@ export function Checklist({
         <div className="mb-3 grid grid-cols-3 gap-2 text-center text-xs">
           {(
             [
-              ["none", "⏳ ยังไม่ได้เตรียมเลย", "bg-surface text-ink-soft"],
-              ["some", "🟡 เตรียมบางคนแล้ว", "bg-alt text-alt-ink"],
-              ["all", "✅ เตรียมครบทุกคน", "bg-done text-done-ink"],
+              ["none", "ยังไม่ได้เตรียมเลย", "bg-surface text-ink-soft"],
+              ["some", "เตรียมบางคนแล้ว", "bg-alt text-alt-ink"],
+              ["all", "เตรียมครบทุกคน", "bg-done text-done-ink"],
             ] as const
           ).map(([state, label, cls]) => (
             <div key={state} className={`rounded-xl px-2 py-2 ${cls}`}>
@@ -167,7 +167,7 @@ export function Checklist({
 
       {shown.length === 0 ? (
         <p className="rounded-2xl border-2 border-dashed border-line p-5 text-center text-sm text-ink-soft">
-          {hideDone && visible.length === 0 && items.length > 0 ? "ทำครบแล้ว 🎉" : "ยังไม่มีรายการ — กด + ข้างหัวข้อเพื่อเพิ่ม"}
+          {hideDone && visible.length === 0 && items.length > 0 ? "ทำครบแล้ว" : "ยังไม่มีรายการ — กด + ข้างหัวข้อเพื่อเพิ่ม"}
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -186,14 +186,14 @@ export function Checklist({
               <li
                 key={item.id}
                 data-reorder-id={item.id}
-                className={`flex items-start gap-2 rounded-2xl border px-2.5 py-2.5 transition ${
+                className={`card-fill-hover flex items-start gap-2 rounded-2xl border px-2.5 py-2.5 ${
                   draggingId === item.id
                     ? "scale-[1.02] border-baby-ink/40 bg-white shadow-lg"
                     : !viewed && group.state === "all"
                       ? "border-done-ink/25 bg-done/30"
                       : !viewed && group.state === "some"
                         ? "border-alt-ink/25 bg-alt/30"
-                        : "border-line/60 bg-white/60 hover:bg-surface/70"
+                        : "border-transparent bg-surface/60"
                 }`}
               >
                 {readOnly ? null : (
@@ -261,8 +261,8 @@ export function Checklist({
                     <p className="mt-2 text-[11px]">
                       <span className={`rounded-full px-2 py-0.5 font-medium ${c.fullyPaid ? "bg-done text-done-ink" : "bg-alert text-alert-ink"}`}>
                         {c.fullyPaid
-                          ? `💴 จ่ายครบ ${money(c.amount, c.currency)}${c.selfPaid ? " · จ่ายกันเอง" : ""}`
-                          : `💴 ${money(c.amount, c.currency)} · เหลือ ${money(checklistRemaining(c), c.currency)}`}
+                          ? `จ่ายครบ ${money(c.amount, c.currency)}${c.selfPaid ? " · จ่ายกันเอง" : ""}`
+                          : `${money(c.amount, c.currency)} · เหลือ ${money(checklistRemaining(c), c.currency)}`}
                       </span>
                     </p>
                   )}
@@ -342,7 +342,7 @@ function ChecklistForm({
             className={inputClass}
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
-            placeholder="เช่น 📷 เช่ากล้อง, 🛂 Passport"
+            placeholder="เช่น เช่ากล้อง, Passport"
           />
         </div>
         <div>
@@ -402,7 +402,7 @@ function ChecklistForm({
               }
               className="h-4 w-4"
             />
-            💴 มีค่าใช้จ่าย (เช่น เช่ากล้อง, ซื้อ eSIM)
+            มีค่าใช้จ่าย (เช่น เช่ากล้อง, ซื้อ eSIM)
           </label>
 
           {c && (
@@ -499,7 +499,7 @@ function ChecklistForm({
 
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <input type="checkbox" checked={c.fullyPaid} onChange={(e) => setCost("fullyPaid", e.target.checked)} className="h-4 w-4" />
-                ✅ จ่ายครบแล้ว (ขึ้นใน Budget อัตโนมัติ)
+                จ่ายครบแล้ว (ขึ้นใน Budget อัตโนมัติ)
               </label>
             </>
           )}
@@ -523,9 +523,9 @@ function ChecklistForm({
 /** Status of an item across everyone assigned: none / some / all prepared. */
 function GroupBadge({ done, total, state }: { done: number; total: number; state: "none" | "some" | "all" }) {
   const look = {
-    none: { cls: "bg-surface text-ink-soft", text: "⏳ ยังไม่ได้เตรียมเลย" },
-    some: { cls: "bg-alt text-alt-ink", text: `🟡 เตรียมแล้ว ${done}/${total}` },
-    all: { cls: "bg-done text-done-ink", text: "✅ เตรียมครบทุกคน" },
+    none: { cls: "bg-white text-ink-soft", text: "ยังไม่ได้เตรียมเลย" },
+    some: { cls: "bg-alt text-alt-ink", text: `เตรียมแล้ว ${done}/${total}` },
+    all: { cls: "bg-done text-done-ink", text: "เตรียมครบทุกคน" },
   }[state];
   return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${look.cls}`}>{look.text}</span>;
 }

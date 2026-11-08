@@ -117,7 +117,7 @@ export function BookingFields({
 
   return (
     <fieldset className="space-y-4 rounded-2xl border border-line bg-white/60 p-3">
-      <legend className="px-1 text-sm font-semibold">🎫 การจอง</legend>
+      <legend className="px-1 text-sm font-semibold">การจอง</legend>
 
       <div>
         <span className={labelClass}>แบบการจอง</span>
@@ -190,11 +190,11 @@ export function BookingFields({
                         b.booked === booked
                           ? booked
                             ? "bg-done text-done-ink"
-                            : "bg-alert text-alert-ink"
+                            : "bg-pending text-pending-ink"
                           : "bg-white text-ink-soft"
                       }`}
                     >
-                      {booked ? "✅ จองแล้ว" : "⏳ ยังไม่จอง"}
+                      {booked ? "จองแล้ว" : "ยังไม่จอง"}
                     </button>
                   ))}
                 </div>
@@ -252,7 +252,7 @@ export function BookingFields({
 
           <ImagePicker
             idPrefix={`${idPrefix}-booking`}
-            label="📎 รูปการจอง (ยืนยัน, QR, ตั๋ว)"
+            label="รูปการจอง (ยืนยัน, QR, ตั๋ว)"
             images={b.images}
             onUpdate={(update) => onUpdate((x) => ({ ...x, images: update(x.images) }))}
           />
@@ -277,7 +277,7 @@ export function BookingFields({
                 }}
                 className="h-4 w-4"
               />
-              💴 มีค่าจอง (เข้า Budget อัตโนมัติ)
+              มีค่าจอง (เข้า Budget อัตโนมัติ)
             </label>
 
             {p.required && (
@@ -400,17 +400,17 @@ export function BookingFields({
 
 // ---------- Card display ----------
 
-/** One short status line for a plan's booking, e.g. "⏳ ยังไม่จอง" or "🕒 เปิดจองอีก 8 วัน". */
+/** One short status line for a plan's booking, e.g. "ยังไม่จอง" or "เปิดจองอีก 8 วัน". */
 export function bookingStatus(b: Booking, start: Date | null, now: number, members: Member[]): { text: string; cls: string } {
-  if (b.kind === "walkin") return { text: "🚶 Walk-in", cls: "bg-surface text-ink-soft" };
+  if (b.kind === "walkin") return { text: "Walk-in", cls: "bg-white text-ink-soft" };
   if (b.booked) {
     const by = members.find((m) => m.id === b.bookedBy);
-    return { text: `✅ จองแล้ว${by ? ` · ${by.emoji}` : ""}`, cls: "bg-done/70 text-done-ink" };
+    return { text: `จองแล้ว${by ? ` · ${by.emoji}` : ""}`, cls: "bg-done/70 text-done-ink" };
   }
   const opensAt = bookingOpensAt(b, start);
   if (opensAt && opensAt.getTime() > now)
-    return { text: `🕒 เปิดจอง${formatCountdown(opensAt.getTime() - now)}`, cls: "bg-surface text-ink-soft" };
-  return { text: "⏳ ยังไม่จอง", cls: "bg-alert text-alert-ink" };
+    return { text: `เปิดจอง${formatCountdown(opensAt.getTime() - now)}`, cls: "border border-dashed border-ink-soft/60 bg-white text-ink-soft" };
+  return { text: "ยังไม่จอง", cls: "bg-pending text-pending-ink" };
 }
 
 /** Compact one-line booking status on an activity card; tap it for details and to mark booked. */
@@ -501,7 +501,7 @@ export function BookingModal({
   if (viewing !== null && b.images[viewing]) {
     const go = (d: number) => setViewing((viewing + d + n) % n);
     return (
-      <Modal title={`🎫 ${title} · รูป ${viewing + 1}/${n}`} onClose={onClose}>
+      <Modal title={`${title} · รูป ${viewing + 1}/${n}`} onClose={onClose}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={b.images[viewing]} alt={`รูปการจอง ${viewing + 1}`} className="max-h-[60dvh] w-full rounded-2xl bg-surface object-contain" />
         <div className="mt-3 flex items-center justify-between gap-2 text-sm">
@@ -520,7 +520,7 @@ export function BookingModal({
   }
 
   return (
-    <Modal title={`🎫 การจอง · ${title}`} onClose={onClose}>
+    <Modal title={`การจอง · ${title}`} onClose={onClose}>
       <div className="space-y-4 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-surface px-3 py-1 font-medium">
@@ -528,9 +528,9 @@ export function BookingModal({
           </span>
           {requiresBooking(b) &&
             (b.booked ? (
-              <span className="rounded-full bg-done px-3 py-1 font-medium text-done-ink">✅ จองแล้ว</span>
+              <span className="rounded-full bg-done px-3 py-1 font-medium text-done-ink">จองแล้ว</span>
             ) : (
-              <span className="rounded-full bg-alert px-3 py-1 font-medium text-alert-ink">⏳ ยังไม่จอง</span>
+              <span className="rounded-full bg-pending px-3 py-1 font-medium text-pending-ink">ยังไม่จอง</span>
             ))}
           {by && requiresBooking(b) && b.booked && <span className="text-ink-soft">โดย {by}</span>}
           {onToggleBooked && requiresBooking(b) && (
@@ -573,7 +573,7 @@ export function BookingModal({
               <>
                 {paymentSummary(p)}
                 <span className="block text-xs text-ink-soft">
-                  {p.selfPaid ? "👥 จ่ายกันเอง" : `🙋 ${payer || "ไม่ระบุ"} จ่ายแทนก่อน`}
+                  {p.selfPaid ? "จ่ายกันเอง" : `${payer || "ไม่ระบุ"} จ่ายแทนก่อน`}
                   {p.date && ` · ${formatDate(p.date)}`}
                 </span>
                 {split.length > 0 && <span className="block text-xs text-ink-soft">{split.join(", ")}</span>}
@@ -585,7 +585,7 @@ export function BookingModal({
         </dl>
 
         <div>
-          <p className="mb-2 text-xs font-medium text-ink-soft">📎 รูปการจอง ({n})</p>
+          <p className="mb-2 text-xs font-medium text-ink-soft">รูปการจอง ({n})</p>
           {n === 0 ? (
             <p className="text-xs text-ink-soft">ยังไม่มีรูป — เพิ่มได้ที่ไอคอนดินสอ</p>
           ) : (

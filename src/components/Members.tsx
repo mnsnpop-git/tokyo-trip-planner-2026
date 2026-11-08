@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { uid, type Member } from "@/lib/trip";
+import { uid, type Member, memberUsageItems, memberUsageText, memberUsageTotal, type MemberUsage } from "@/lib/trip";
 import { DEFAULT_PIN, checkPin, isPinFormat } from "@/lib/pin";
 import { Modal, inputClass, labelClass } from "./Modal";
 import { IconButton } from "./Icons";
@@ -28,8 +28,8 @@ export function Members({
   onChangeMyPin: (pin: string) => void;
   /** Put another member back on the default PIN. */
   onResetPin: (id: string) => void;
-  /** Number of expenses/bookings that reference the member. */
-  usage: (id: string) => number;
+  /** Where the member is still referenced, per menu. */
+  usage: (id: string) => MemberUsage;
   onSave: (m: Member) => void;
   onDelete: (id: string) => void;
 }) {
@@ -47,7 +47,7 @@ export function Members({
   return (
     <section aria-label="สมาชิก" className="rounded-3xl border border-line bg-white/80 p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-1.5">
-        <h2 className="text-lg font-semibold">👥 สมาชิกในทริป</h2>
+        <h2 className="text-lg font-semibold">สมาชิกในทริป</h2>
         <IconButton
           icon="add"
           label="เพิ่มสมาชิก"
@@ -65,6 +65,8 @@ export function Members({
         {members.map((m) => {
           const isMe = m.id === currentMemberId;
           const used = usage(m.id);
+          const usedItems = memberUsageItems(used);
+          const usedText = memberUsageText(used);
           if (editing === m.id) {
             return (
               <li key={m.id}>
@@ -82,12 +84,12 @@ export function Members({
           }
           // Removing yourself would sign you out mid-edit; removing a referenced member would break the bill split.
           const blockedReason = isMe
-            ? "ลบโปรไฟล์ที่กำลังใช้อยู่ไม่ได้ — เปลี่ยนโปรไฟล์ก่อน"
-            : used > 0
-              ? `ลบไม่ได้: มี ${used} รายการค่าใช้จ่าย/Booking ที่อ้างถึง`
+            ? "ลบโปรไฟล์ที่กำลังใช้อยู่ไม่ได้ — เปลี่ยนไปโปรไฟล์อื่นก่อน"
+            : memberUsageTotal(used) > 0
+              ? `ยังลบไม่ได้ — ยังอยู่ใน ${usedText}`
               : "";
           return (
-            <li key={m.id} className="rounded-2xl bg-surface/60 px-3 py-2.5">
+            <li key={m.id} className="card-fill-hover rounded-2xl bg-surface/60 px-3 py-2.5">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-white bg-white text-xl shadow-sm">
                   {m.emoji}
@@ -97,7 +99,21 @@ export function Members({
                     {m.name}
                     {isMe && <span className="ml-2 rounded-full bg-baby px-2 py-0.5 text-[11px] font-medium text-baby-ink">คุณ</span>}
                   </p>
-                  <p className="text-xs text-ink-soft">{used > 0 ? `อยู่ใน ${used} รายการ` : "ยังไม่มีรายการ"}</p>
+                  {usedItems.length > 0 ? (
+                    <p className="mt-0.5 flex flex-wrap gap-1" aria-label={`อยู่ใน ${usedText}`}>
+                      {usedItems.map((i) => (
+                        <span
+                          key={i.key}
+                          title={`${i.label} ${i.count} รายการ`}
+                          className="rounded-full bg-white px-1.5 py-px text-[11px] font-medium text-ink-soft shadow-sm"
+                        >
+                          {i.icon} {i.count}
+                        </span>
+                      ))}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-ink-soft">ยังไม่มีรายการ</p>
+                  )}
                 </div>
                 <span className="flex shrink-0 gap-0.5">
                   <IconButton
@@ -111,20 +127,17 @@ export function Members({
                   <IconButton
                     icon="delete"
                     label={`ลบ ${m.name}`}
-                    title={blockedReason || `ลบ ${m.name}`}
                     onClick={() => {
                       setEditing(null);
                       setDeleting(m.id);
                     }}
-                    disabled={Boolean(blockedReason)}
                   />
                 </span>
               </div>
-              {blockedReason && !readOnly && <p className="mt-1 pl-[3.25rem] text-[11px] text-ink-soft">{blockedReason}</p>}
               {/* PINs: only signed-in members see these controls; nobody ever sees the PIN itself. */}
               {!readOnly && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-[3.25rem] text-[11px]">
-                  <span className="text-ink-soft">{m.pinHash ? "🔒 ตั้ง PIN แล้ว" : "🔓 ใช้ PIN เริ่มต้น"}</span>
+                  <span className="text-ink-soft">{m.pinHash ? "ตั้ง PIN แล้ว" : "ใช้ PIN เริ่มต้น"}</span>
                   {isMe ? (
                     <button
                       onClick={() => setChangingPin(true)}
@@ -162,7 +175,14 @@ export function Members({
                   )}
                 </div>
               )}
-              {deleting === m.id && (
+              {/* Tapping delete on a member who can't be removed explains why, quietly. */}
+              {deleting === m.id && blockedReason && (
+                <div role="status" className="mt-2 flex items-center gap-2 rounded-xl bg-white/70 px-2.5 py-1.5 text-[11px] text-ink-soft">
+                  <p className="min-w-0 flex-1">ℹ️ {blockedReason}</p>
+                  <IconButton icon="close" size="sm" label="ปิด" onClick={() => setDeleting(null)} />
+                </div>
+              )}
+              {deleting === m.id && !blockedReason && (
                 <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-alert/40 p-2.5 text-xs text-alert-ink">
                   ลบ {m.emoji} {m.name} ออกจากทริป?
                   <span className="ml-auto flex gap-1">
@@ -290,7 +310,7 @@ function MemberEditor({
         </div>
       </div>
 
-      {isNew && <p className="text-[11px] text-ink-soft">🔓 PIN เริ่มต้นคือ {DEFAULT_PIN} — เจ้าของโปรไฟล์เปลี่ยนเองได้หลังเข้าใช้</p>}
+      {isNew && <p className="text-[11px] text-ink-soft">PIN เริ่มต้นคือ {DEFAULT_PIN} — เจ้าของโปรไฟล์เปลี่ยนเองได้หลังเข้าใช้</p>}
 
       {error && <p className="rounded-xl bg-alert/60 px-3 py-1.5 text-xs text-alert-ink">{error}</p>}
 

@@ -14,6 +14,10 @@
   --color-done-ink: #2a7fb8;
   --color-alert: #eceef1; /* not booked, delete, errors (grey + black) */
   --color-alert-ink: #111418;
+  --color-visited: #e4f5e8; /* "ไปแล้ว" badge (soft green) */
+  --color-visited-ink: #2f8a4c;
+  --color-pending: #fdeceb; /* not booked yet (soft red, pairs with the baby blue) */
+  --color-pending-ink: #c2413b;
   --color-alt: #f1f3f5; /* backup plan */
   --color-alt-ink: #4b5563;
   --color-sky: #bfe2f7; /* deeper baby blue for category badges */
@@ -25,8 +29,64 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
+/* Card hover: one shade deeper in the accent colour (only on devices that really hover, not iPhone taps). */
+@utility card-hover {
+  transition-property: border-color, box-shadow, background-color;
+  transition-duration: 150ms;
+  @media (hover: hover) {
+    &:hover {
+      border-color: var(--color-sky);
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+    }
+  }
+}
+
+/* Same idea for borderless cards filled with the grey surface colour: grey → baby blue. */
+@utility card-fill-hover {
+  transition-property: background-color;
+  transition-duration: 150ms;
+  @media (hover: hover) {
+    &:hover {
+      background-color: color-mix(in srgb, var(--color-baby) 70%, transparent);
+    }
+  }
+}
+
+/* ---------- Dark mode ----------
+   Same roles, dark values. "white" is the page/card colour and "ink" the text colour, so
+   bg-white / text-white / bg-ink flip with them (white text on a black button becomes dark text
+   on a light button). The theme is chosen in the menu (src/lib/theme.ts). */
+:root {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-white: #121619;
+  --color-surface: #1c2228;
+  --color-line: #2b333c;
+  --color-ink: #e9edf1;
+  --color-ink-soft: #9aa5b1;
+
+  --color-baby: #173248;
+  --color-baby-ink: #8ccaf2;
+  --color-done: #153042;
+  --color-done-ink: #84c3ec;
+  --color-alert: #252b32;
+  --color-alert-ink: #e9edf1;
+  --color-visited: #163522;
+  --color-visited-ink: #86d6a1;
+  --color-pending: #3b2020;
+  --color-pending-ink: #f2a19a;
+  --color-alt: #21272e;
+  --color-alt-ink: #b6c0cb;
+  --color-sky: #1d4462;
+  --color-sky-ink: #abd9f6;
+  --color-grey: #2a3138;
+  --color-grey-ink: #cfd6de;
+}
+
 body {
-  background: #ffffff;
+  background: var(--color-white);
   color: var(--color-ink);
   font-family: var(--font-sans);
 }

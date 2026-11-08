@@ -132,6 +132,7 @@ export function ProfileSwitcher({
 export function ProfileSelect({
   tripName,
   tripYear,
+  tripDates,
   members,
   onSelect,
   onGuest,
@@ -141,6 +142,8 @@ export function ProfileSelect({
   tripName: string;
   /** e.g. "2026", same as the header label "2026 Trip". */
   tripYear: string;
+  /** e.g. "09 - 15 Dec 2026"; empty when the trip has no days yet. */
+  tripDates: string;
   members: Member[];
   /** Called once the member's PIN was entered correctly. */
   onSelect: (id: string, pin: string) => void;
@@ -162,6 +165,7 @@ export function ProfileSelect({
       <div className="relative w-full max-w-2xl text-center">
         <p className="font-sans text-sm font-medium tracking-[0.2em] text-baby-ink">{tripYear} Trip</p>
         <p className="mt-1 truncate text-lg font-semibold text-ink-soft">{loading ? "\u00a0" : tripName}</p>
+        {!loading && tripDates && <p className="mt-0.5 text-sm font-medium text-baby-ink">{tripDates}</p>}
         <h1 className="mt-2 text-3xl font-bold sm:text-4xl">ใครกำลังวางแผนอยู่? 🗼</h1>
         <p className="mt-2 text-sm text-ink-soft">เลือกโปรไฟล์เพื่อเข้าสู่แพลนทริป</p>
 
@@ -212,7 +216,6 @@ export function ProfileSelect({
         >
           <span aria-hidden>{GUEST.emoji}</span> เข้าแบบ Guest · ดูอย่างเดียว
         </button>
-        <p className="mt-6 text-xs text-ink-soft">เพิ่ม/แก้ไขสมาชิก และเปลี่ยน PIN ได้ที่เมนู 👥 Travelers หลังเข้าสู่ระบบ</p>
         {asking && (
           <PinPad
             title={`${asking.emoji} ${asking.name}`}
