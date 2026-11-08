@@ -25,7 +25,8 @@ import {
 import { Modal, inputClass, labelClass } from "./Modal";
 import { paymentSummary } from "./Booking";
 import { PayerField } from "./PayerField";
-import { DeleteButton, IconButton } from "./Icons";
+import { DeleteButton, IconButton, openOnCardClick } from "./Icons";
+import type { GoTo } from "./TripPlanner";
 
 type Tab = "overview" | "list";
 type StatusFilter = "all" | "unpaid" | "paid";
@@ -40,25 +41,41 @@ function unitFormat(unit: Currency, thbPerJpy: number) {
   };
 }
 
-/** Where a derived expense comes from, and where to edit it. */
-function sourceOf(e: Expense): { icon: string; hint: string } {
-  if (e.id.startsWith("flight-")) return { icon: "✈️", hint: "ตั๋วเครื่องบิน · แก้ที่ Trip Planner > All" };
-  if (e.id.startsWith("hotel-")) return { icon: "🏨", hint: "ที่พัก · แก้ที่ Trip Planner > All" };
-  if (e.id.startsWith("booking-")) return { icon: "🎫", hint: "ค่าจอง · แก้ที่กิจกรรม" };
-  if (e.wishId) return { icon: "🛍️", hint: "Wishlist · แก้ที่เมนู Wishlist" };
-  if (e.checklistId) return { icon: "🎒", hint: "Checklist · แก้ที่เมนู Checklist" };
-  return { icon: "💴", hint: "" };
+/**
+ * Where a derived expense comes from, and the page (and item) where its cost is edited.
+ * Manual expenses (added in Budget) have no link: they're edited right in their details sheet.
+ */
+function sourceOf(e: Expense, data: TripData): { icon: string; kind: string; edit?: { label: string; to: GoTo } } {
+  if (e.id.startsWith("flight-"))
+    return { icon: "✈️", kind: "ตั๋วเครื่องบิน", edit: { label: "Trip Planner › All", to: { view: "plan", day: "all", elementId: e.id } } };
+  if (e.id.startsWith("hotel-"))
+    return { icon: "🏨", kind: "ที่พัก", edit: { label: "Trip Planner › All", to: { view: "plan", day: "all", elementId: e.id } } };
+  if (e.id.startsWith("booking-")) {
+    const a = data.activities.find((x) => `booking-${x.id}` === e.id);
+    return {
+      icon: "🎫",
+      kind: "ค่าจอง",
+      edit: a && { label: "Reservations", to: { view: "bookings", elementId: `res-${a.id}-${a.planIndex}` } },
+    };
+  }
+  if (e.wishId) return { icon: "🛍️", kind: "Wishlist", edit: { label: "Wishlist", to: { view: "wishlist", elementId: `wish-${e.wishId}` } } };
+  if (e.checklistId)
+    return { icon: "🎒", kind: "Checklist", edit: { label: "Checklist", to: { view: "checklist", elementId: `check-${e.checklistId}` } } };
+  return { icon: "💴", kind: "เพิ่มเองใน Budget" };
 }
 
 export function Expenses({
   data,
   currentMemberId,
   onChange,
+  onGoTo,
 }: {
   data: TripData;
   /** The signed-in profile, used as the default payer for new expenses. */
   currentMemberId?: string;
   onChange: (patch: Partial<TripData>) => void;
+  /** Open the page where a derived cost is edited. */
+  onGoTo: (to: GoTo) => void;
 }) {
   const { members, expenses } = data;
   const memberById = Object.fromEntries(members.map((m) => [m.id, m])) as Record<string, Member>;
@@ -145,6 +162,7 @@ export function Expenses({
           activityLabel={activityLabel}
           activityGroups={activityGroups}
           onChange={onChange}
+          onGoTo={onGoTo}
         />
       )}
 
@@ -319,7 +337,7 @@ function Overview({
                   {list.map((e) => (
                     <li key={e.id} className="flex gap-2">
                       <span className="min-w-0 flex-1 truncate">
-                        {sourceOf(e).icon} {e.title}
+                        {sourceOf(e, data).icon} {e.title}
                       </span>
                       <span className="shrink-0">{money(e.amount, e.currency)}</span>
                     </li>
@@ -347,6 +365,7 @@ function ExpenseList({
   activityLabel,
   activityGroups,
   onChange,
+  onGoTo,
 }: {
   data: TripData;
   unit: Currency;
@@ -356,8 +375,10 @@ function ExpenseList({
   activityLabel: (id: string) => string;
   activityGroups: ActivityGroup[];
   onChange: (patch: Partial<TripData>) => void;
+  onGoTo: (to: GoTo) => void;
 }) {
   const readOnly = useReadOnly();
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const { members, expenses, thbPerJpy } = data;
   const { fmt, other } = unitFormat(unit, thbPerJpy);
   const [person, setPerson] = useState("all");
@@ -441,102 +462,163 @@ function ExpenseList({
       ) : (
         <ul className="space-y-2">
           {shown.map((e) => {
-            const src = sourceOf(e);
-            const isManual = manualIds.has(e.id);
-            const activity = e.activityId ? activityById(data, e.activityId) : undefined;
-            const booking = e.id.startsWith("booking-") && activity ? activePlace(activity).booking : undefined;
+            const src = sourceOf(e, data);
             const paidCount = e.splitAmong.filter((id) => paid(e, id)).length;
-            const share = shareOf(e);
+            const allPaid = paidCount === e.splitAmong.length;
             return (
-              <li key={e.id} className="card-fill-hover rounded-2xl bg-surface/60 p-3">
-                <div className="flex items-start gap-2">
-                  <span aria-hidden className="mt-0.5 shrink-0">
-                    {src.icon}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium leading-snug">{e.title}</p>
-                    <p className="text-xs text-ink-soft">
-                      {e.selfPaid ? "จ่ายกันเอง" : `${name(e.paidBy)} จ่ายแทนก่อน`} · หาร {e.splitAmong.length} คน
-                      {e.date && ` · ${formatDate(e.date)}`}
-                    </p>
-                    {booking?.payment.priceType === "perPerson" && (
-                      <p className="text-xs text-ink-soft">{paymentSummary(booking.payment)}</p>
-                    )}
-                    {!isManual && e.activityId && activityLabel(e.activityId) && (
-                      <p className="truncate text-xs text-baby-ink">📍 {activityLabel(e.activityId)}</p>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="font-semibold">{money(e.amount, e.currency)}</p>
-                    <p className="text-[11px] text-ink-soft">
-                      ≈ {e.currency === unit ? other(toJpy(e, thbPerJpy)) : fmt(toJpy(e, thbPerJpy))}
-                    </p>
-                  </div>
-                  {isManual && <DeleteButton size="sm" label={`ลบ ${e.title}`} onConfirm={() => removeExpense(e)} />}
+              // Compact row for phones: what, how much, how far paid. Everything else is in the details sheet.
+              <li
+                key={e.id}
+                onClick={openOnCardClick(() => setViewingId(e.id))}
+                className="card-fill-hover flex cursor-pointer items-center gap-2.5 rounded-2xl bg-surface/60 py-2.5 pl-3 pr-1.5"
+              >
+                <span aria-hidden className="shrink-0 text-lg">
+                  {src.icon}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium leading-snug">{e.title}</p>
+                  <p className={`text-[11px] ${allPaid ? "text-done-ink" : "text-ink-soft"}`}>
+                    จ่ายแล้ว {paidCount}/{e.splitAmong.length} · คนละ {money(shareOf(e), e.currency)}
+                  </p>
                 </div>
-
-                {/* Who has paid their share (display only) */}
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] text-ink-soft">
-                    จ่ายแล้ว {paidCount}/{e.splitAmong.length} · คนละ {money(share, e.currency)}
-                  </span>
-                  {e.splitAmong.map((id) => {
-                    const m = members.find((x) => x.id === id);
-                    if (!m) return null;
-                    const isPayer = !e.selfPaid && id === e.paidBy;
-                    const done = paid(e, id);
-                    const focus = person === id;
-                    return isPayer ? (
-                      <span
-                        key={id}
-                        title="คนจ่ายแทนก่อน"
-                        className={`rounded-full bg-done px-2 py-0.5 text-[11px] font-medium text-done-ink ${focus ? "ring-2 ring-ink/40" : ""}`}
-                      >
-                        {m.emoji} {m.name} · ออกก่อน
-                      </span>
-                    ) : (
-                      <span
-                        key={id}
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                          done ? "bg-done text-done-ink" : "bg-alert text-alert-ink"
-                        } ${focus ? "ring-2 ring-ink/40" : ""}`}
-                      >
-                        {m.emoji} {m.name} {done ? "✓" : "○"}
-                      </span>
-                    );
-                  })}
-                </div>
-
-                {isManual && !readOnly ? (
-                  <ActivitySelect
-                    groups={activityGroups}
-                    value={e.activityId && data.activities.some((a) => a.id === e.activityId) ? e.activityId : ""}
-                    onChange={(id) =>
-                      onChange({
-                        expenses: expenses.map((x) => {
-                          if (x.id !== e.id) return x;
-                          const next: Expense = { ...x, activityId: id };
-                          if (!id) delete next.activityId;
-                          return next;
-                        }),
-                      })
-                    }
-                    ariaLabel={`กิจกรรมของ ${e.title}`}
-                    className={`mt-2 max-w-full truncate rounded-lg border px-1.5 py-0.5 text-base sm:text-xs ${
-                      e.activityId && data.activities.some((a) => a.id === e.activityId)
-                        ? "border-baby-ink/30 bg-baby text-baby-ink"
-                        : "border-dashed border-line bg-white text-ink-soft"
-                    }`}
-                    emptyLabel="🔗 ผูกกับกิจกรรม…"
-                  />
-                ) : (
-                  <p className="mt-2 text-[11px] text-ink-soft">{src.hint}</p>
-                )}
+                <p className="shrink-0 font-semibold">{money(e.amount, e.currency)}</p>
+                <IconButton icon="view" size="sm" label={`ดูรายละเอียด ${e.title}`} onClick={() => setViewingId(e.id)} />
               </li>
             );
           })}
         </ul>
       )}
+
+      {viewingId &&
+        (() => {
+          const e = ordered.find((x) => x.id === viewingId);
+          if (!e) return null;
+          const src = sourceOf(e, data);
+          const isManual = manualIds.has(e.id);
+          const activity = e.activityId ? activityById(data, e.activityId) : undefined;
+          const booking = e.id.startsWith("booking-") && activity ? activePlace(activity).booking : undefined;
+          const paidCount = e.splitAmong.filter((id) => paid(e, id)).length;
+          const close = () => setViewingId(null);
+          return (
+            <Modal title={e.title} onClose={close}>
+              <div className="space-y-4 text-sm">
+                <div className="flex items-baseline justify-between gap-3 rounded-2xl bg-surface/60 px-3 py-2.5">
+                  <span className="text-ink-soft">
+                    {src.icon} {src.kind}
+                  </span>
+                  <span className="text-right">
+                    <span className="block text-lg font-bold">{money(e.amount, e.currency)}</span>
+                    <span className="text-[11px] text-ink-soft">
+                      ≈ {e.currency === unit ? other(toJpy(e, thbPerJpy)) : fmt(toJpy(e, thbPerJpy))}
+                    </span>
+                  </span>
+                </div>
+
+                <dl className="divide-y divide-line/60">
+                  {(
+                    [
+                      ["คนจ่าย", e.selfPaid ? "จ่ายกันเอง" : `${name(e.paidBy)} จ่ายแทนก่อน`],
+                      ["หาร", `${e.splitAmong.length} คน · คนละ ${money(shareOf(e), e.currency)}`],
+                      ["ราคา", booking?.payment.priceType === "perPerson" ? paymentSummary(booking.payment) : ""],
+                      ["วันที่", e.date ? formatDate(e.date) : ""],
+                    ] as const
+                  )
+                    .filter(([, v]) => v)
+                    .map(([k, v]) => (
+                      <div key={k} className="flex gap-3 py-2">
+                        <dt className="w-16 shrink-0 text-ink-soft">{k}</dt>
+                        <dd className="min-w-0 flex-1">{v}</dd>
+                      </div>
+                    ))}
+                  {!isManual && e.activityId && activityLabel(e.activityId) && (
+                    <div className="flex gap-3 py-2">
+                      <dt className="w-16 shrink-0 text-ink-soft">กิจกรรม</dt>
+                      <dd className="min-w-0 flex-1">
+                        <button
+                          onClick={() => {
+                            close();
+                            const a = activityById(data, e.activityId!);
+                            if (a) onGoTo({ view: "plan", day: a.dayId, elementId: `activity-${a.id}` });
+                          }}
+                          className="text-left font-medium text-baby-ink hover:underline"
+                        >
+                          {activityLabel(e.activityId)} ›
+                        </button>
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-ink-soft">
+                    จ่ายส่วนของตัวเองแล้ว {paidCount}/{e.splitAmong.length}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {e.splitAmong.map((id) => {
+                      const m = members.find((x) => x.id === id);
+                      if (!m) return null;
+                      const isPayer = !e.selfPaid && id === e.paidBy;
+                      const done = paid(e, id);
+                      return (
+                        <span
+                          key={id}
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            isPayer || done ? "bg-done text-done-ink" : "bg-alert text-alert-ink"
+                          }`}
+                        >
+                          {m.emoji} {m.name} {isPayer ? "· ออกก่อน" : done ? "✓" : "○"}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {isManual ? (
+                  !readOnly && (
+                    <div className="flex items-center gap-2 border-t border-line/60 pt-3">
+                      <ActivitySelect
+                        groups={activityGroups}
+                        value={e.activityId && data.activities.some((a) => a.id === e.activityId) ? e.activityId : ""}
+                        onChange={(id) =>
+                          onChange({
+                            expenses: expenses.map((x) => {
+                              if (x.id !== e.id) return x;
+                              const next: Expense = { ...x, activityId: id };
+                              if (!id) delete next.activityId;
+                              return next;
+                            }),
+                          })
+                        }
+                        ariaLabel={`กิจกรรมของ ${e.title}`}
+                        className="min-w-0 flex-1 truncate rounded-xl border border-line bg-surface/60 px-2.5 py-1.5 text-base sm:text-sm"
+                        emptyLabel="ผูกกับกิจกรรม…"
+                      />
+                      <DeleteButton
+                        label={`ลบ ${e.title}`}
+                        onConfirm={() => {
+                          removeExpense(e);
+                          close();
+                        }}
+                      />
+                    </div>
+                  )
+                ) : (
+                  src.edit && (
+                    <button
+                      onClick={() => {
+                        close();
+                        onGoTo(src.edit!.to);
+                      }}
+                      className="w-full rounded-xl bg-surface/60 px-3 py-2.5 text-left text-sm font-medium text-baby-ink hover:bg-baby"
+                    >
+                      แก้ไขค่าใช้จ่ายนี้ที่ {src.edit.label} ›
+                    </button>
+                  )
+                )}
+              </div>
+            </Modal>
+          );
+        })()}
     </div>
   );
 }

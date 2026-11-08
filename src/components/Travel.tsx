@@ -28,7 +28,7 @@ import {
 } from "@/lib/trip";
 import { Modal, inputClass, labelClass } from "./Modal";
 import { PayerField } from "./PayerField";
-import { DeleteButton, IconButton } from "./Icons";
+import { DeleteButton, IconButton, openOnCardClick } from "./Icons";
 
 const money = (n: number, c: Currency) => (c === "JPY" ? yen(n) : baht(n));
 
@@ -55,7 +55,7 @@ export function AirlineLogo({ code, name, size = "md" }: { code: string; name: s
     );
   }
   return (
-    <span className={`${box} flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white ring-1 ring-line`}>
+    <span className={`${box} flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#fff] ring-1 ring-line`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={airlineLogoUrl(code)}
@@ -273,7 +273,12 @@ export function TravelSection({
             {sortedFlights.map((f) => {
               const dir = FLIGHT_DIRECTIONS.find((d) => d.id === f.direction)!;
               return (
-                <li key={f.id} className="card-fill-hover rounded-2xl bg-surface/60 p-3">
+                <li
+                  key={f.id}
+                  id={`flight-${f.id}`}
+                  onClick={openOnCardClick(() => setViewing({ kind: "flight", id: f.id }))}
+                  className="card-fill-hover cursor-pointer rounded-2xl bg-surface/60 p-3"
+                >
                   <div className="flex items-start gap-2.5">
                     <AirlineLogo code={f.airline} name={f.airlineName} />
                     <div className="min-w-0 flex-1">
@@ -329,7 +334,12 @@ export function TravelSection({
               const attached = h.mapUrl && isSafeUrl(h.mapUrl) ? h.mapUrl : "";
               const map = attached || (h.address || h.name ? mapsSearchUrl(h.address || h.name) : "");
               return (
-                <li key={h.id} className="card-fill-hover rounded-2xl bg-surface/60 p-3">
+                <li
+                  key={h.id}
+                  id={`hotel-${h.id}`}
+                  onClick={openOnCardClick(() => setViewing({ kind: "hotel", id: h.id }))}
+                  className="card-fill-hover cursor-pointer rounded-2xl bg-surface/60 p-3"
+                >
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-1.5">

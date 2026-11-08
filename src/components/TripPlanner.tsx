@@ -147,6 +147,9 @@ function loadTrip(): TripData {
 
 type View = "plan" | "bookings" | "wishlist" | "expenses" | "members" | "categories" | "checklist";
 
+/** A page plus the element to scroll to there (and the day to show, for the Trip Planner). */
+export type GoTo = { view: View; elementId: string; day?: string };
+
 const MENU: MenuItem<View>[] = [
   { id: "plan", label: "Trip Planner", icon: "🗓️" },
   { id: "bookings", label: "Reservations", icon: "🎫" },
@@ -266,22 +269,29 @@ export function TripPlanner() {
     setViewState("wishlist");
     setWishFocus(activityId);
   };
-  /** Activity to scroll to once the Trip Planner shows it (from a wish's "📍" link). */
-  const [planFocus, setPlanFocus] = useState<string | null>(null);
+  /** Element to scroll to (and flash) once its page is showing, e.g. "activity-…" or "wish-…". */
+  const [scrollTarget, setScrollTarget] = useState<string | null>(null);
+  /** Open a page at one item: used by links such as a wish's activity or Budget's "edit at …". */
+  const goTo = (target: GoTo) => {
+    setView(target.view);
+    if (target.day) setSelectedDay(target.day);
+    setScrollTarget(target.elementId);
+  };
   const openActivity = (activityId: string) => {
     const a = trip.activities.find((x) => x.id === activityId);
-    if (!a) return;
-    setView("plan");
-    setSelectedDay(a.dayId);
-    setPlanFocus(activityId);
+    if (a) goTo({ view: "plan", day: a.dayId, elementId: `activity-${a.id}` });
   };
   useEffect(() => {
-    if (!planFocus || view !== "plan") return;
-    const el = document.getElementById(`activity-${planFocus}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-    el?.animate([{ boxShadow: "0 0 0 3px var(--color-baby-ink)" }, { boxShadow: "0 0 0 0 transparent" }], { duration: 1600 });
-    setPlanFocus(null); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [planFocus, view]);
+    if (!scrollTarget) return;
+    // Wait a frame so the newly opened page is in the DOM.
+    const raf = requestAnimationFrame(() => {
+      const el = document.getElementById(scrollTarget);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.animate([{ boxShadow: "0 0 0 3px var(--color-baby-ink)" }, { boxShadow: "0 0 0 0 transparent" }], { duration: 1600 });
+      setScrollTarget(null);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [scrollTarget, view]);
   const [menuOrder, setMenuOrder] = useState<View[]>(loadMenuOrder);
 
   useEffect(() => {
@@ -634,6 +644,7 @@ export function TripPlanner() {
             currentMemberId={me.id}
             thbPerJpy={trip.thbPerJpy}
             focusActivityId={wishFocus}
+            startOnEveryone={!!scrollTarget?.startsWith("wish-")}
             onOpenActivity={openActivity}
             onSaveItem={saveWish}
             onDeleteItem={deleteWish}
@@ -641,7 +652,7 @@ export function TripPlanner() {
             onDeleteTag={deleteWishTag}
           />
         )}
-        {view === "expenses" && <Expenses data={trip} currentMemberId={me.id} onChange={patch} />}
+        {view === "expenses" && <Expenses data={trip} currentMemberId={me.id} onChange={patch} onGoTo={goTo} />}
         {view === "members" && (
           <Members
             members={trip.members}
@@ -665,6 +676,7 @@ export function TripPlanner() {
             items={trip.checklist}
             members={trip.members}
             currentMemberId={me.id}
+            startOnEveryone={!!scrollTarget?.startsWith("check-")}
             onChange={(checklist) => patch({ checklist })} />}
       </main>
 

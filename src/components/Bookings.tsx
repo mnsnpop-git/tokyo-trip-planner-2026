@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "./Modal";
-import { IconButton } from "./Icons";
+import { IconButton, openOnCardClick } from "./Icons";
 import {
   BOOKING_KINDS,
   activityStart,
@@ -350,7 +350,10 @@ function BookingRow({
   else detail = "จองได้เลย";
 
   return (
-    <li className={`card-fill-hover relative rounded-2xl bg-surface/60 p-3 ${e.inUse ? "" : "opacity-60"}`}>
+    <li
+      id={`res-${e.activity.id}-${e.planIndex}`}
+      onClick={openOnCardClick(onView)}
+      className={`card-fill-hover relative cursor-pointer rounded-2xl bg-surface/60 p-3 ${e.inUse ? "" : "opacity-60"}`}>
       {/* Time · title · status, then view/edit. Status is changed in the edit form. */}
       <div className="-mr-1.5 -mt-1.5 flex items-start gap-2">
         <p className="min-w-0 flex-1 pt-1.5 leading-snug">

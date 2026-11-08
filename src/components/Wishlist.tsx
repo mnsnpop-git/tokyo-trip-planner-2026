@@ -48,6 +48,7 @@ export function Wishlist({
   currentMemberId,
   thbPerJpy,
   focusActivityId,
+  startOnEveryone = false,
   onOpenActivity,
   onSaveItem,
   onDeleteItem,
@@ -64,6 +65,8 @@ export function Wishlist({
   thbPerJpy: number;
   /** Highlight (and scroll to) the wishes linked to this activity. */
   focusActivityId: string | null;
+  /** Opened from a link to one item: show everyone's wishes so it isn't filtered out. */
+  startOnEveryone?: boolean;
   /** Go to this activity in the Trip Planner. */
   onOpenActivity: (activityId: string) => void;
   onSaveItem: (w: WishItem) => void;
@@ -76,7 +79,7 @@ export function Wishlist({
   const [tagFilter, setTagFilter] = useState<string>("all");
   // Filters, like the Checklist page: whose wishes (one person or "all"), bought or not, type, day, activity.
   // Opened from an activity's badge: start on everyone, so its items aren't filtered out.
-  const [person, setPerson] = useState<string>(() => (focusActivityId ? "all" : currentMemberId));
+  const [person, setPerson] = useState<string>(() => (focusActivityId || startOnEveryone ? "all" : currentMemberId));
   const [status, setStatus] = useState<"all" | "todo" | "bought">("all");
   const [dayFilter, setDayFilter] = useState<string>("all");
   const [activityFilter, setActivityFilter] = useState<string>("all");

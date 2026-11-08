@@ -170,3 +170,15 @@ export function DeleteButton({
     />
   );
 }
+
+/**
+ * Click handler for a card that has a "view details" button: a tap anywhere on the card opens the
+ * details too, except on its own controls (buttons, links, inputs). Keyboard users keep the 👁 button.
+ */
+export function openOnCardClick(open: () => void) {
+  return (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label, summary, [role=button], [role=checkbox]")) return;
+    if (window.getSelection()?.toString()) return; // selecting text, not opening
+    open();
+  };
+}

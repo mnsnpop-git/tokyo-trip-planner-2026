@@ -503,7 +503,7 @@ export function BookingModal({
     return (
       <Modal title={`${title} · รูป ${viewing + 1}/${n}`} onClose={onClose}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={b.images[viewing]} alt={`รูปการจอง ${viewing + 1}`} className="max-h-[60dvh] w-full rounded-2xl bg-surface object-contain" />
+        <img src={b.images[viewing]} alt={`รูปการจอง ${viewing + 1}`} className="max-h-[60dvh] w-full rounded-2xl bg-[#fff] object-contain" />
         <div className="mt-3 flex items-center justify-between gap-2 text-sm">
           <button onClick={() => setViewing(null)} className="rounded-full px-3 py-1.5 text-ink-soft hover:bg-surface">
             ← กลับ
@@ -598,7 +598,7 @@ export function BookingModal({
                   className="overflow-hidden rounded-xl border border-line"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" loading="lazy" className="aspect-square w-full object-cover" />
+                  <img src={src} alt="" loading="lazy" className="aspect-square w-full bg-[#fff] object-cover" />
                 </button>
               ))}
             </div>

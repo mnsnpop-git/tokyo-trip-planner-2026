@@ -31,15 +31,18 @@ export function Checklist({
   items,
   members,
   currentMemberId,
+  startOnEveryone = false,
   onChange,
 }: {
   items: ChecklistItem[];
   members: Member[];
   currentMemberId: string;
+  /** Opened from a link to one item: show everyone's list so it isn't filtered out. */
+  startOnEveryone?: boolean;
   onChange: (items: ChecklistItem[]) => void;
 }) {
   // Whose list is shown: a member id, or "all".
-  const [viewing, setViewing] = useState<string>(currentMemberId);
+  const [viewing, setViewing] = useState<string>(() => (startOnEveryone ? "all" : currentMemberId));
   const [hideDone, setHideDone] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
 
@@ -185,6 +188,7 @@ export function Checklist({
             return (
               <li
                 key={item.id}
+                id={`check-${item.id}`}
                 data-reorder-id={item.id}
                 className={`card-fill-hover flex items-start gap-2 rounded-2xl border px-2.5 py-2.5 ${
                   draggingId === item.id

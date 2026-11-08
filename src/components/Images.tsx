@@ -35,7 +35,7 @@ export function ImageViewer({
   return (
     <Modal title={title} onClose={onClose}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={images[index]} alt={`${title} รูปที่ ${index + 1}`} className="max-h-[60dvh] w-full rounded-2xl bg-surface object-contain" />
+      <img src={images[index]} alt={`${title} รูปที่ ${index + 1}`} className="max-h-[60dvh] w-full rounded-2xl bg-[#fff] object-contain" />
       {n > 1 && (
         <div className="mt-3 flex items-center justify-between text-sm">
           <button onClick={() => go(-1)} className="rounded-full bg-surface px-3 py-1.5 hover:bg-baby">
@@ -142,7 +142,7 @@ export function ImagePicker({
           {images.map((src, i) => (
             <div key={`${i}-${src.slice(-16)}`} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt={`รูปที่ ${i + 1}`} className="aspect-square w-full rounded-xl border border-line object-cover" />
+              <img src={src} alt={`รูปที่ ${i + 1}`} className="aspect-square w-full rounded-xl border border-line bg-[#fff] object-cover" />
               <button
                 type="button"
                 onClick={() => onUpdate((prev) => prev.filter((_, j) => j !== i))}
