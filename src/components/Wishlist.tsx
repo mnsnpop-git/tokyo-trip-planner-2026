@@ -83,6 +83,7 @@ export function Wishlist({
   const [status, setStatus] = useState<"all" | "todo" | "bought">("all");
   const [dayFilter, setDayFilter] = useState<string>("all");
   const [activityFilter, setActivityFilter] = useState<string>("all");
+  const [showBought, setShowBought] = useState(true);
   const [managingTags, setManagingTags] = useState(false);
 
   const memberById = new Map(members.map((m) => [m.id, m]));
@@ -143,6 +144,38 @@ export function Wishlist({
 
   const openNew = () =>
     setDraft({ ...EMPTY_WISH, wantedBy: members.some((m) => m.id === currentMemberId) ? [currentMemberId] : [] });
+
+  /** One wish card (used in both the to-buy and the bought section). */
+  const renderWish = (w: WishItem) => {
+    const activity = activityById.get(w.activityId);
+    const di = activity ? dayIndex.get(activity.dayId) : undefined;
+    const payers = [...new Set(Object.values(w.gotBy))]
+      .map((id) => memberById.get(id))
+      .filter((m): m is Member => Boolean(m));
+    return (
+      <WishRow
+        key={w.id}
+        item={w}
+        highlight={!!focusActivityId && w.activityId === focusActivityId}
+        tags={w.tags.map((id) => tagById.get(id)).filter((t): t is WishTag => Boolean(t))}
+        wanters={w.wantedBy.map((id) => memberById.get(id)).filter((m): m is Member => Boolean(m))}
+        where={
+          activity && di !== undefined
+            ? `DAY ${di + 1} · ${formatDayTab(days[di].date)} · ${activity.time} · ${activePlace(activity).title}`
+            : ""
+        }
+        onOpenWhere={activity && di !== undefined ? () => onOpenActivity(activity.id) : undefined}
+        currentMemberId={currentMemberId}
+        payers={payers.map((m) => m.emoji).join(" ")}
+        onToggleGot={(memberId) => toggleGot(w, memberId)}
+        onEdit={() => setDraft(w)}
+        onDelete={() => onDeleteItem(w.id)}
+      />
+    );
+  };
+
+  const toBuy = shown.filter((w) => !boughtFor(w));
+  const boughtList = shown.filter(boughtFor);
 
   return (
     <section aria-label="Wishlist" className="space-y-5">
@@ -273,38 +306,37 @@ export function Wishlist({
       {/* List */}
       {shown.length === 0 ? (
         <p className="rounded-2xl border-2 border-dashed border-line p-6 text-center text-sm text-ink-soft">
-          {items.length === 0 ? "No wishes yet — tap + to add one" : "Nothing matches these filters"}
+          {items.length === 0 ? "ยังไม่มี wishlist — กด + เพื่อเพิ่ม" : "ไม่มีรายการที่ตรงกับตัวกรอง"}
         </p>
       ) : (
-        <ul className="space-y-2">
-          {shown.map((w) => {
-            const activity = activityById.get(w.activityId);
-            const di = activity ? dayIndex.get(activity.dayId) : undefined;
-            const payers = [...new Set(Object.values(w.gotBy))]
-              .map((id) => memberById.get(id))
-              .filter((m): m is Member => Boolean(m));
-            return (
-              <WishRow
-                key={w.id}
-                item={w}
-                highlight={!!focusActivityId && w.activityId === focusActivityId}
-                tags={w.tags.map((id) => tagById.get(id)).filter((t): t is WishTag => Boolean(t))}
-                wanters={w.wantedBy.map((id) => memberById.get(id)).filter((m): m is Member => Boolean(m))}
-                where={
-                  activity && di !== undefined
-                    ? `DAY ${di + 1} · ${formatDayTab(days[di].date)} · ${activity.time} · ${activePlace(activity).title}`
-                    : ""
-                }
-                onOpenWhere={activity && di !== undefined ? () => onOpenActivity(activity.id) : undefined}
-                currentMemberId={currentMemberId}
-                payers={payers.map((m) => m.emoji).join(" ")}
-                onToggleGot={(memberId) => toggleGot(w, memberId)}
-                onEdit={() => setDraft(w)}
-                onDelete={() => onDeleteItem(w.id)}
-              />
-            );
-          })}
-        </ul>
+        <div className="space-y-4">
+          {/* Still to buy first; ticked wishes move down to "ซื้อแล้ว". */}
+          {status !== "bought" && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-ink-soft">ยังไม่ได้ซื้อ ({toBuy.length})</p>
+              {toBuy.length === 0 ? (
+                <p className="rounded-2xl bg-done/40 px-3 py-2.5 text-center text-sm text-done-ink">ซื้อครบแล้ว</p>
+              ) : (
+                <ul className="space-y-2">{toBuy.map(renderWish)}</ul>
+              )}
+            </div>
+          )}
+          {boughtList.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowBought((v) => !v)}
+                aria-expanded={showBought}
+                className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-soft hover:text-ink"
+              >
+                <svg aria-hidden viewBox="0 0 20 20" className={`h-3 w-3 transition-transform ${showBought ? "rotate-90" : ""}`} fill="currentColor">
+                  <path d="M7 4l7 6-7 6V4z" />
+                </svg>
+                ซื้อแล้ว ({boughtList.length})
+              </button>
+              {showBought && <ul className="space-y-2">{boughtList.map(renderWish)}</ul>}
+            </div>
+          )}
+        </div>
       )}
 
       {draft && (

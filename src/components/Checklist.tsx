@@ -43,7 +43,7 @@ export function Checklist({
 }) {
   // Whose list is shown: a member id, or "all".
   const [viewing, setViewing] = useState<string>(() => (startOnEveryone ? "all" : currentMemberId));
-  const [hideDone, setHideDone] = useState(false);
+  const [showDone, setShowDone] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
 
   const memberById = new Map(members.map((m) => [m.id, m]));
@@ -59,8 +59,7 @@ export function Checklist({
   };
 
   const visible = items
-    .filter((i) => !viewed || i.assignees.includes(viewed.id))
-    .filter((i) => !hideDone || !(viewed ? isDone(i, viewed.id) : i.assignees.every((id) => isDone(i, id))));
+    .filter((i) => !viewed || i.assignees.includes(viewed.id));
   const readOnly = useReadOnly();
   const { order, draggingId, start, move } = useDragReorder(
     visible.map((i) => i.id),
@@ -68,6 +67,11 @@ export function Checklist({
   );
   const byId = new Map(items.map((i) => [i.id, i]));
   const shown = order.map((id) => byId.get(id)).filter((i): i is ChecklistItem => Boolean(i));
+  /** Done for the person being viewed, or by everyone it's assigned to in the "all" view. */
+  const itemDone = (i: ChecklistItem) =>
+    viewed ? isDone(i, viewed.id) : i.assignees.length > 0 && i.assignees.every((id) => isDone(i, id));
+  const todo = shown.filter((i) => !itemDone(i));
+  const done = shown.filter(itemDone);
 
   const toggleMine = (item: ChecklistItem) =>
     onChange(
@@ -89,6 +93,113 @@ export function Checklist({
 
   const myItems = listOf(currentMemberId);
   const myDone = myItems.filter((i) => isDone(i, currentMemberId)).length;
+
+  /** One item card (used in both the to-do and the done section). */
+  const renderItem = (item: ChecklistItem) => {
+    // Whose tick the checkbox shows: the viewed member, or me in the "all" view.
+    const owner = viewed?.id ?? currentMemberId;
+    const ownerAssigned = item.assignees.includes(owner);
+    const checked = isDone(item, owner);
+    const group = groupStatus(item);
+    // The checkbox: only in a person's tab, and only you can tick your own.
+    const canTick = !!viewed && viewed.id === currentMemberId && ownerAssigned && !readOnly;
+    const struck = viewed ? checked && ownerAssigned : group.state === "all";
+    const assignees = item.assignees.map((id) => memberById.get(id)).filter((m): m is Member => Boolean(m));
+    const c = item.cost;
+    return (
+      <li
+        key={item.id}
+        id={`check-${item.id}`}
+        data-reorder-id={item.id}
+        className={`card-fill-hover flex items-start gap-2 rounded-2xl border px-2.5 py-2.5 ${
+          draggingId === item.id
+            ? "scale-[1.02] border-baby-ink/40 bg-white shadow-lg"
+            : !viewed && group.state === "all"
+              ? "border-done-ink/25 bg-done/30"
+              : !viewed && group.state === "some"
+                ? "border-alt-ink/25 bg-alt/30"
+                : "border-transparent bg-surface/60"
+        }`}
+      >
+        {readOnly ? null : (
+        <button
+          onPointerDown={(e) => start(e, item.id)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault();
+              move(item.id, e.key === "ArrowUp" ? -1 : 1);
+            }
+          }}
+          aria-label={`ลากเพื่อย้าย ${item.label} (หรือกด ↑/↓)`}
+          className="mt-0.5 flex h-6 w-5 shrink-0 cursor-grab touch-none select-none items-center justify-center text-ink-soft/50 hover:text-ink-soft active:cursor-grabbing"
+        >
+          ⋮⋮
+        </button>
+        )}
+        {viewed &&
+          (ownerAssigned ? (
+            <input
+              type="checkbox"
+              checked={checked}
+              disabled={!canTick}
+              onChange={() => toggleMine(item)}
+              aria-label={`${item.label}: ${checked ? "เตรียมแล้ว" : "ยังไม่เตรียม"}`}
+              title={canTick ? (checked ? "เตรียมแล้ว" : "ติ๊กเมื่อเตรียมแล้ว") : "เปลี่ยนได้เฉพาะของตัวเอง"}
+              className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-done-ink disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          ) : (
+            <span aria-hidden className="mt-0.5 h-5 w-5 shrink-0" />
+          ))}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+            <p className={`min-w-0 flex-1 text-sm font-medium ${struck ? "text-ink-soft line-through" : ""}`}>{item.label}</p>
+            {!viewed && group.total > 0 && <GroupBadge {...group} />}
+          </div>
+          {item.note && <p className="mt-0.5 line-clamp-2 text-xs text-ink-soft">{item.note}</p>}
+
+          {/* Who has to prepare it, and whether each has. Only your own name can be tapped. */}
+          {assignees.length > 0 && (
+            <div className="mt-2">
+              <p className="mb-1 text-[11px] text-ink-soft">คนที่ต้องเตรียม</p>
+              <div className="flex flex-wrap gap-2">
+                {assignees.map((m) => {
+                  const done = isDone(item, m.id);
+                  return (
+                    <span
+                      key={m.id}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
+                        done ? "border-done-ink/20 bg-done text-done-ink" : "border-line bg-white text-ink-soft"
+                      } ${viewed?.id === m.id ? "font-semibold ring-2 ring-ink/15" : ""}`}
+                    >
+                      <span aria-hidden>{m.emoji}</span>
+                      <span className={done ? "line-through decoration-2" : ""}>{m.name}</span>
+                      <span className="text-[10px] font-semibold opacity-80">· {done ? "เตรียมแล้ว" : "ยังไม่เตรียม"}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {c && c.amount > 0 && (
+            <p className="mt-2 text-[11px]">
+              <span className={`rounded-full px-2 py-0.5 font-medium ${c.fullyPaid ? "bg-done text-done-ink" : "bg-alert text-alert-ink"}`}>
+                {c.fullyPaid
+                  ? `จ่ายครบ ${money(c.amount, c.currency)}${c.selfPaid ? " · จ่ายกันเอง" : ""}`
+                  : `${money(c.amount, c.currency)} · เหลือ ${money(checklistRemaining(c), c.currency)}`}
+              </span>
+            </p>
+          )}
+        </div>
+
+        <span className="flex shrink-0 items-center gap-0.5">
+          <IconButton icon="edit" label={`แก้ไข ${item.label}`} onClick={() => setDraft(item)} />
+          <DeleteButton label={`ลบ ${item.label}`} onConfirm={() => onChange(items.filter((i) => i.id !== item.id))} />
+        </span>
+      </li>
+    );
+  };
 
   return (
     <section aria-label="ของที่ต้องเตรียม" className="rounded-3xl border border-line bg-white/80 p-5 shadow-sm">
@@ -163,123 +274,37 @@ export function Checklist({
         </div>
       )}
 
-      <label className="mb-2 flex w-fit cursor-pointer items-center gap-2 text-xs text-ink-soft">
-        <input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} className="h-4 w-4" />
-        ซ่อนที่เตรียมแล้ว
-      </label>
-
       {shown.length === 0 ? (
         <p className="rounded-2xl border-2 border-dashed border-line p-5 text-center text-sm text-ink-soft">
-          {hideDone && visible.length === 0 && items.length > 0 ? "ทำครบแล้ว" : "ยังไม่มีรายการ — กด + ข้างหัวข้อเพื่อเพิ่ม"}
+          ยังไม่มีรายการ — กด + ข้างหัวข้อเพื่อเพิ่ม
         </p>
       ) : (
-        <ul className="space-y-1.5">
-          {shown.map((item) => {
-            // Whose tick the checkbox shows: the viewed member, or me in the "all" view.
-            const owner = viewed?.id ?? currentMemberId;
-            const ownerAssigned = item.assignees.includes(owner);
-            const checked = isDone(item, owner);
-            const group = groupStatus(item);
-            // The checkbox: only in a person's tab, and only you can tick your own.
-            const canTick = !!viewed && viewed.id === currentMemberId && ownerAssigned && !readOnly;
-            const struck = viewed ? checked && ownerAssigned : group.state === "all";
-            const assignees = item.assignees.map((id) => memberById.get(id)).filter((m): m is Member => Boolean(m));
-            const c = item.cost;
-            return (
-              <li
-                key={item.id}
-                id={`check-${item.id}`}
-                data-reorder-id={item.id}
-                className={`card-fill-hover flex items-start gap-2 rounded-2xl border px-2.5 py-2.5 ${
-                  draggingId === item.id
-                    ? "scale-[1.02] border-baby-ink/40 bg-white shadow-lg"
-                    : !viewed && group.state === "all"
-                      ? "border-done-ink/25 bg-done/30"
-                      : !viewed && group.state === "some"
-                        ? "border-alt-ink/25 bg-alt/30"
-                        : "border-transparent bg-surface/60"
-                }`}
+        <div className="space-y-4">
+          {/* To prepare first; ticked items move down to "เตรียมแล้ว". */}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-ink-soft">ยังไม่ได้เตรียม ({todo.length})</p>
+            {todo.length === 0 ? (
+              <p className="rounded-2xl bg-done/40 px-3 py-2.5 text-center text-sm text-done-ink">เตรียมครบแล้ว</p>
+            ) : (
+              <ul className="space-y-1.5">{todo.map(renderItem)}</ul>
+            )}
+          </div>
+          {done.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowDone((v) => !v)}
+                aria-expanded={showDone}
+                className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-soft hover:text-ink"
               >
-                {readOnly ? null : (
-                <button
-                  onPointerDown={(e) => start(e, item.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                      e.preventDefault();
-                      move(item.id, e.key === "ArrowUp" ? -1 : 1);
-                    }
-                  }}
-                  aria-label={`ลากเพื่อย้าย ${item.label} (หรือกด ↑/↓)`}
-                  className="mt-0.5 flex h-6 w-5 shrink-0 cursor-grab touch-none select-none items-center justify-center text-ink-soft/50 hover:text-ink-soft active:cursor-grabbing"
-                >
-                  ⋮⋮
-                </button>
-                )}
-                {viewed &&
-                  (ownerAssigned ? (
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={!canTick}
-                      onChange={() => toggleMine(item)}
-                      aria-label={`${item.label}: ${checked ? "เตรียมแล้ว" : "ยังไม่เตรียม"}`}
-                      title={canTick ? (checked ? "เตรียมแล้ว" : "ติ๊กเมื่อเตรียมแล้ว") : "เปลี่ยนได้เฉพาะของตัวเอง"}
-                      className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-done-ink disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                  ) : (
-                    <span aria-hidden className="mt-0.5 h-5 w-5 shrink-0" />
-                  ))}
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
-                    <p className={`min-w-0 flex-1 text-sm font-medium ${struck ? "text-ink-soft line-through" : ""}`}>{item.label}</p>
-                    {!viewed && group.total > 0 && <GroupBadge {...group} />}
-                  </div>
-                  {item.note && <p className="mt-0.5 line-clamp-2 text-xs text-ink-soft">{item.note}</p>}
-
-                  {/* Who has to prepare it, and whether each has. Only your own name can be tapped. */}
-                  {assignees.length > 0 && (
-                    <div className="mt-2">
-                      <p className="mb-1 text-[11px] text-ink-soft">คนที่ต้องเตรียม</p>
-                      <div className="flex flex-wrap gap-2">
-                        {assignees.map((m) => {
-                          const done = isDone(item, m.id);
-                          return (
-                            <span
-                              key={m.id}
-                              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
-                                done ? "border-done-ink/20 bg-done text-done-ink" : "border-line bg-white text-ink-soft"
-                              } ${viewed?.id === m.id ? "font-semibold ring-2 ring-ink/15" : ""}`}
-                            >
-                              <span aria-hidden>{m.emoji}</span>
-                              <span className={done ? "line-through decoration-2" : ""}>{m.name}</span>
-                              <span className="text-[10px] font-semibold opacity-80">· {done ? "เตรียมแล้ว" : "ยังไม่เตรียม"}</span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {c && c.amount > 0 && (
-                    <p className="mt-2 text-[11px]">
-                      <span className={`rounded-full px-2 py-0.5 font-medium ${c.fullyPaid ? "bg-done text-done-ink" : "bg-alert text-alert-ink"}`}>
-                        {c.fullyPaid
-                          ? `จ่ายครบ ${money(c.amount, c.currency)}${c.selfPaid ? " · จ่ายกันเอง" : ""}`
-                          : `${money(c.amount, c.currency)} · เหลือ ${money(checklistRemaining(c), c.currency)}`}
-                      </span>
-                    </p>
-                  )}
-                </div>
-
-                <span className="flex shrink-0 items-center gap-0.5">
-                  <IconButton icon="edit" label={`แก้ไข ${item.label}`} onClick={() => setDraft(item)} />
-                  <DeleteButton label={`ลบ ${item.label}`} onConfirm={() => onChange(items.filter((i) => i.id !== item.id))} />
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+                <svg aria-hidden viewBox="0 0 20 20" className={`h-3 w-3 transition-transform ${showDone ? "rotate-90" : ""}`} fill="currentColor">
+                  <path d="M7 4l7 6-7 6V4z" />
+                </svg>
+                เตรียมแล้ว ({done.length})
+              </button>
+              {showDone && <ul className="space-y-1.5">{done.map(renderItem)}</ul>}
+            </div>
+          )}
+        </div>
       )}
 
       {!readOnly && (
