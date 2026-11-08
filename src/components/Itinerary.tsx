@@ -16,7 +16,7 @@ import {
   planName,
   plansOf,
   slotFromTime,
-  sumJpy,
+  sumThb,
   uid,
   updatePlanBooking,
   updatePlace,
@@ -411,7 +411,7 @@ function ActivityCard({
   const [viewing, setViewing] = useState<{ place: Place; index: number } | null>(null);
   const title = activePlace(a).title;
   const plans = plansOf(a);
-  const total = sumJpy(costs, thbPerJpy);
+  const total = sumThb(costs, thbPerJpy);
 
   /** Flip a plan's booked status; marking it booked credits the signed-in profile if nobody is set. */
   const toggleBooked = (planIndex: number) =>
@@ -483,7 +483,7 @@ function ActivityCard({
                   aria-expanded={showCosts}
                   className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-ink hover:bg-baby"
                 >
-                  💴 {yen(total)} {showCosts ? "▴" : "▾"}
+                  💴 {baht(total)} {showCosts ? "▴" : "▾"}
                 </button>
               )}
             </div>
@@ -501,7 +501,7 @@ function ActivityCard({
                 {costs.length > 1 && (
                   <li className="flex gap-2 border-t border-line pt-0.5 font-semibold">
                     <span className="flex-1">รวม</span>
-                    <span>{yen(total)}</span>
+                    <span>{baht(total)}</span>
                   </li>
                 )}
               </ul>
@@ -603,15 +603,18 @@ function PlaceView({ place, onViewImage }: { place: Place; onViewImage: (index: 
   const hasLink = place.mapUrl && isSafeUrl(place.mapUrl);
   return (
     <>
-      <p className="font-medium leading-snug">{place.title}</p>
-      <a
-        href={hasLink ? place.mapUrl : mapsSearchUrl(place.title)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-1 inline-block text-xs font-medium text-baby-ink underline-offset-2 hover:underline"
-      >
-        📍 {hasLink ? "เปิด Google Maps" : "ค้นหาใน Maps"}
-      </a>
+      <div className="flex items-start gap-2">
+        <p className="min-w-0 flex-1 break-words font-medium leading-snug">{place.title}</p>
+        <a
+          href={hasLink ? place.mapUrl : mapsSearchUrl(place.title)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open Map: ${place.title}`}
+          className="shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-xs font-medium text-baby-ink hover:bg-baby"
+        >
+          📍 Open Map
+        </a>
+      </div>
       {place.note && <p className="mt-1 text-sm text-ink-soft">{place.note}</p>}
 
       {place.images.length > 0 && (

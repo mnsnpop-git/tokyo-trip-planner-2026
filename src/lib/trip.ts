@@ -119,6 +119,7 @@ export interface SubTask {
   id: string;
   title: string;
   note: string;
+  mapUrl: string; // Google Maps link (optional)
   images: string[];
   priority: SubTaskPriority;
   done: boolean;
@@ -132,6 +133,7 @@ function normalizeSubTasks(v: unknown): SubTask[] {
       id: typeof t.id === "string" && t.id ? t.id : uid(),
       title: t.title as string,
       note: typeof t.note === "string" ? t.note : "",
+      mapUrl: typeof t.mapUrl === "string" && isSafeUrl(t.mapUrl) ? t.mapUrl : "",
       images: Array.isArray(t.images) ? t.images.filter((x): x is string => typeof x === "string").filter(isSafeImageSrc) : [],
       priority: t.priority === "nice" ? "nice" : "must",
       done: t.done === true,
@@ -214,7 +216,7 @@ export const EMPTY_BOOKING: Booking = {
   details: "",
   images: [],
   bookedBy: "",
-  payment: { required: false, amount: 0, priceType: "total", currency: "JPY", selfPaid: false, paidBy: "", splitAmong: [], date: "" },
+  payment: { required: false, amount: 0, priceType: "total", currency: "THB", selfPaid: false, paidBy: "", splitAmong: [], date: "" },
 };
 
 /** Kinds where someone has to make a reservation (walk-in and none don't). */
@@ -954,6 +956,13 @@ export function expensesByActivity(data: ExpenseSources): Map<string, Expense[]>
 
 /** Sum of expenses in yen. */
 export const sumJpy = (list: Expense[], thbPerJpy: number) => list.reduce((s, e) => s + toJpy(e, thbPerJpy), 0);
+
+export function toThb(e: Pick<Expense, "amount" | "currency">, thbPerJpy: number): number {
+  return e.currency === "THB" ? e.amount : e.amount * thbPerJpy;
+}
+
+/** Sum of expenses in baht (how activity costs are shown). */
+export const sumThb = (list: Expense[], thbPerJpy: number) => list.reduce((s, e) => s + toThb(e, thbPerJpy), 0);
 
 export interface Transfer {
   from: string;

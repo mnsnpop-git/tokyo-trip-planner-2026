@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MAX_IMAGES, isSafeUrl } from "@/lib/trip";
+import { useImageUpload } from "@/lib/imageUpload";
 import { Modal, inputClass, labelClass } from "./Modal";
 import { IconButton, PlusIcon, TrashIcon } from "./Icons";
 
@@ -52,8 +53,8 @@ export function ImageViewer({
   );
 }
 
-/** Downscale an uploaded photo to a small JPEG data URL so it fits in localStorage. */
-async function downscaleImage(file: File, maxSide = 800, quality = 0.7): Promise<string> {
+/** Downscale an uploaded photo to a small JPEG (keeps uploads and storage small). */
+async function downscaleImage(file: File, maxSide = 1280, quality = 0.75): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
@@ -63,7 +64,20 @@ async function downscaleImage(file: File, maxSide = 800, quality = 0.7): Promise
   if (!ctx) throw new Error("canvas unavailable");
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  return canvas.toDataURL("image/jpeg", quality);
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", quality),
+  );
+}
+
+/** Inline fallback when there's no server storage: a smaller copy as a data URL. */
+async function toDataUrl(file: File): Promise<string> {
+  const blob = await downscaleImage(file, 800, 0.7);
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
 }
 
 export function ImagePicker({
@@ -80,6 +94,7 @@ export function ImagePicker({
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const uploadImage = useImageUpload();
   const room = MAX_IMAGES - images.length;
   const add = (srcs: string[]) => onUpdate((prev) => [...prev, ...srcs].slice(0, MAX_IMAGES));
 
@@ -89,14 +104,23 @@ export function ImagePicker({
     if (files.length === 0) return;
     setError("");
     setBusy(true);
-    try {
-      add(await Promise.all(files.slice(0, room).map((f) => downscaleImage(f))));
-      if (files.length > room) setError(`ใส่รูปได้สูงสุด ${MAX_IMAGES} รูป`);
-    } catch {
-      setError("อ่านไฟล์รูปบางไฟล์ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG");
-    } finally {
-      setBusy(false);
-    }
+    const results = await Promise.allSettled(
+      files.slice(0, room).map(async (f) => {
+        let small: Blob;
+        try {
+          small = await downscaleImage(f);
+        } catch {
+          throw new Error("read");
+        }
+        return (await uploadImage(small)) ?? (await toDataUrl(f));
+      }),
+    );
+    add(results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])));
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed.some((r) => (r.reason as Error).message === "read")) setError("อ่านไฟล์รูปบางไฟล์ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG");
+    else if (failed.length > 0) setError("อัปโหลดรูปไม่สำเร็จ ลองเช็กอินเทอร์เน็ตแล้วลองใหม่");
+    else if (files.length > room) setError(`ใส่รูปได้สูงสุด ${MAX_IMAGES} รูป`);
+    setBusy(false);
   };
 
   const addUrl = () => {
@@ -141,7 +165,7 @@ export function ImagePicker({
             }`}
           >
             <PlusIcon className="h-5 w-5" />
-            <span className="sr-only">{busy ? "กำลังย่อรูป…" : "อัปโหลดรูป"}</span>
+            <span className="sr-only">{busy ? "กำลังอัปโหลดรูป…" : "อัปโหลดรูป"}</span>
             <input
               id={`${idPrefix}-upload`}
               type="file"

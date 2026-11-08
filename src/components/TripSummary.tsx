@@ -13,8 +13,8 @@ import {
   type Hotel,
   type Member,
   type TripData,
-  sumJpy,
-  yen,
+  sumThb,
+  baht,
   type Expense,
   requiresBooking,
   type Activity,
@@ -70,7 +70,7 @@ export function TripSummary({
   const visited = ordered.filter((a) => a.visited).length;
   const withBackup = ordered.filter((a) => a.backups.length > 0).length;
   const onBackup = ordered.filter((a) => a.planIndex > 0).length;
-  const costOf = (a: Activity) => sumJpy(costs.get(a.id) ?? [], thbPerJpy);
+  const costOf = (a: Activity) => sumThb(costs.get(a.id) ?? [], thbPerJpy);
   const costOfList = (list: Activity[]) => list.reduce((s, a) => s + costOf(a), 0);
   // Booking stats follow the plan in use (main or backup).
   const toBook = ordered.filter((a) => requiresBooking(activePlace(a).booking));
@@ -94,7 +94,7 @@ export function TripSummary({
           progress={toBook.length ? booked / toBook.length : undefined}
         />
         <Stat label="มีแผนสำรอง" value={`${withBackup}`} unit={onBackup ? `· ใช้อยู่ ${onBackup}` : "รายการ"} />
-        <Stat label="💴 ค่าใช้จ่ายกิจกรรม" value={yen(costOfList(ordered))} />
+        <Stat label="💴 ค่าใช้จ่ายกิจกรรม" value={baht(costOfList(ordered))} />
       </div>
 
       <TravelSection
@@ -175,7 +175,7 @@ export function TripSummary({
                     <span className="text-sm text-ink-soft">{formatDate(day.date)}</span>
                     {!isOpen && <span className="text-xs text-ink-soft">· {items.length} กิจกรรม</span>}
                     {costOfList(items) > 0 && (
-                      <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">💴 {yen(costOfList(items))}</span>
+                      <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">💴 {baht(costOfList(items))}</span>
                     )}
                   </button>
                   <button
@@ -233,7 +233,7 @@ export function TripSummary({
                   </span>
                   <span className="text-sm text-ink-soft">{items.length} รายการ</span>
                   {costOfList(items) > 0 && (
-                    <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">💴 {yen(costOfList(items))}</span>
+                    <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">💴 {baht(costOfList(items))}</span>
                   )}
                 </header>
                 <Progress done={done} total={items.length} />
@@ -318,7 +318,7 @@ function SummaryRow({
         <span className={`min-w-0 flex-1 truncate ${a.visited ? "line-through" : ""}`}>{place.title}</span>
         {place.subtasks.length > 0 && (
           <span
-            title="สถานที่ / กิจกรรมย่อยที่ทำแล้ว"
+            title="กิจกรรมย่อยที่ทำแล้ว"
             className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
               place.subtasks.every((t) => t.done) ? "bg-done text-done-ink" : "bg-surface text-ink-soft"
             }`}
@@ -329,7 +329,7 @@ function SummaryRow({
         {needsBooking(a) && (
           <span className="shrink-0 rounded-full bg-alert px-2 py-0.5 text-[11px] font-medium text-alert-ink">⏳ ยังไม่จอง</span>
         )}
-        {cost > 0 && <span className="shrink-0 text-xs font-medium">{yen(cost)}</span>}
+        {cost > 0 && <span className="shrink-0 text-xs font-medium">{baht(cost)}</span>}
         {onBackup && (
           <span className="shrink-0 rounded-full bg-alt px-2 py-0.5 text-[11px] font-medium text-alt-ink">🔁 สำรอง</span>
         )}

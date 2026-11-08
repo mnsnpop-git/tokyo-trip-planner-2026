@@ -136,6 +136,7 @@ export function ProfileSelect({
   onSelect,
   onGuest,
   onRestoreDefaults,
+  loading = false,
 }: {
   tripName: string;
   /** e.g. "2026", same as the header label "2026 Trip". */
@@ -145,6 +146,8 @@ export function ProfileSelect({
   onSelect: (id: string, pin: string) => void;
   onGuest: () => void;
   onRestoreDefaults: () => void;
+  /** Still fetching the shared trip: `members` may be just the built-in default, so don't show them yet. */
+  loading?: boolean;
 }) {
   const [asking, setAsking] = useState<Member | null>(null);
   return (
@@ -158,11 +161,22 @@ export function ProfileSelect({
 
       <div className="relative w-full max-w-2xl text-center">
         <p className="font-sans text-sm font-medium tracking-[0.2em] text-baby-ink">{tripYear} Trip</p>
-        <p className="mt-1 truncate text-lg font-semibold text-ink-soft">{tripName}</p>
+        <p className="mt-1 truncate text-lg font-semibold text-ink-soft">{loading ? "\u00a0" : tripName}</p>
         <h1 className="mt-2 text-3xl font-bold sm:text-4xl">ใครกำลังวางแผนอยู่? 🗼</h1>
         <p className="mt-2 text-sm text-ink-soft">เลือกโปรไฟล์เพื่อเข้าสู่แพลนทริป</p>
 
-        {members.length > 0 ? (
+        {loading ? (
+          <ul aria-busy="true" aria-label="กำลังโหลดโปรไฟล์" className="mt-10 flex flex-wrap justify-center gap-4 sm:gap-6">
+            {[0, 1, 2].map((i) => (
+              <li key={i} className="w-[calc(50%-0.5rem)] max-w-36 sm:w-36">
+                <div className="flex w-full flex-col items-center gap-3 p-3">
+                  <span className="aspect-square w-full max-w-32 animate-pulse rounded-3xl border-2 border-line bg-surface" />
+                  <span className="h-4 w-16 animate-pulse rounded-full bg-surface" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : members.length > 0 ? (
           <ul className="mt-10 flex flex-wrap justify-center gap-4 sm:gap-6">
             {members.map((m) => (
               <li key={m.id} className="w-[calc(50%-0.5rem)] max-w-36 sm:w-36">

@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { browser } from "react-dom";
 import { useCloudSync, type SyncStatus } from "@/lib/useCloudSync";
 import { checkPin, pinHashOf } from "@/lib/pin";
+import { ImageUploadProvider, inlineImages, makeUploader, replaceStrings } from "@/lib/imageUpload";
 import { ReadOnlyProvider } from "./ReadOnly";
 import { PinPad } from "./PinPad";
 import { Itinerary } from "./Itinerary";
@@ -95,7 +96,27 @@ function normalizeTrip(parsedValue: unknown): TripData {
 /** Whether this browser had its own saved trip when the page opened. */
 let hadLocalSave = false;
 
+/** Backup keys, newest first. */
+function backupKeys(): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k?.startsWith(`${BACKUP_KEY}:`)) keys.push(k);
+  }
+  return keys.sort((a, b) => Number(b.split(":").pop()) - Number(a.split(":").pop()));
+}
+
+/** Drop all but the newest `keep` backups (each is a full copy of the trip, photos included). */
+function pruneBackups(keep: number) {
+  try {
+    backupKeys().slice(keep).forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // storage blocked
+  }
+}
+
 function backupTrip(raw: string) {
+  pruneBackups(1); // keep the newest older one plus this new one
   try {
     localStorage.setItem(`${BACKUP_KEY}:${Date.now()}`, raw);
   } catch {
@@ -194,25 +215,61 @@ export function TripPlanner() {
   const [saveFailed, setSaveFailed] = useState(false);
   // Read once on mount: whether the saved trip couldn't be loaded (and was backed up).
   const [loadError, setLoadError] = useState(() => loadFailed);
+  const memberAuth = session && !("guest" in session) ? session : null;
   const sync = useCloudSync({
     trip,
     setTrip: setTripState, // the server's copy always applies, guests included
-    auth: session && !("guest" in session) ? session : null,
+    auth: memberAuth,
     readOnly: isGuest,
     parse: normalizeTrip,
     hadLocalSave,
     backupLocal: (t) => backupTrip(JSON.stringify(t)),
   });
+  const uploadImage = useMemo(
+    () => makeUploader(memberAuth && { memberId: memberAuth.memberId, pin: memberAuth.pin }),
+    [memberAuth?.memberId, memberAuth?.pin], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // Photos added before cloud storage were kept inline in the trip data; move them to the cloud once.
+  const migrating = useRef(false);
+  useEffect(() => {
+    if (sync.status !== "synced" || !memberAuth || migrating.current) return;
+    const inline = inlineImages(trip);
+    if (inline.length === 0) return;
+    migrating.current = true;
+    void (async () => {
+      const map = new Map<string, string>();
+      for (const src of inline) {
+        try {
+          const url = await uploadImage(await (await fetch(src)).blob());
+          if (!url) break; // no server storage
+          map.set(src, url);
+        } catch {
+          break; // offline or refused: retry next time the trip syncs
+        }
+      }
+      if (map.size > 0) setTrip((t) => replaceStrings(t, map));
+      migrating.current = false;
+    })();
+  }, [sync.status, trip, memberAuth, uploadImage, setTrip]);
+
   const [view, setView] = useState<View>("plan");
   const [menuOrder, setMenuOrder] = useState<View[]>(loadMenuOrder);
 
   useEffect(() => {
     let failed = false;
+    const raw = JSON.stringify(trip);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(trip));
+      localStorage.setItem(STORAGE_KEY, raw);
     } catch {
-      // storage full (usually too many uploaded photos) or blocked; the app still works for this session
-      failed = true;
+      // Storage full: old backups are the usual culprit, so drop them and try once more.
+      pruneBackups(0);
+      try {
+        localStorage.setItem(STORAGE_KEY, raw);
+      } catch {
+        // still full (inline photos) or blocked; the app still works for this session
+        failed = true;
+      }
     }
     // Reports the outcome of the external write; React bails out when the value is unchanged.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -366,6 +423,8 @@ export function TripPlanner() {
         tripName={trip.name}
         tripYear={tripYear}
         members={trip.members}
+        // Until the shared trip has loaded, the members are only this browser's copy (or the default).
+        loading={sync.status === "connecting"}
         onSelect={signIn}
         onGuest={() => saveSession({ guest: true })}
         onRestoreDefaults={() => patch({ members: DEFAULT_MEMBERS })}
@@ -376,6 +435,7 @@ export function TripPlanner() {
 
   return (
     <ReadOnlyProvider value={isGuest}>
+    <ImageUploadProvider value={uploadImage}>
     <div className="min-h-dvh">
       {switchTo && (
         <PinPad
@@ -580,6 +640,7 @@ export function TripPlanner() {
       </footer>
       )}
     </div>
+    </ImageUploadProvider>
     </ReadOnlyProvider>
   );
 }

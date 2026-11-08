@@ -344,7 +344,7 @@ export function TravelSection({
                           className="mt-0.5 flex min-w-0 items-center gap-1 text-xs font-medium text-baby-ink hover:underline"
                         >
                           <span aria-hidden>📍</span>
-                          <span className="truncate">{h.address || (attached ? "ดูแผนที่" : "ค้นหาบนแผนที่")}</span>
+                          <span className="truncate">{h.address || "Open Map"}</span>
                           <span aria-hidden>↗</span>
                         </a>
                       )}

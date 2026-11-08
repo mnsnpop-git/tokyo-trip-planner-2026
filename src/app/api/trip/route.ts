@@ -1,6 +1,7 @@
-import { connection } from "next/server";
+import { after, connection } from "next/server";
 import { checkPin } from "@/lib/pin";
-import { supabaseConfigured } from "@/lib/supabase/server";
+import { removeUnlinkedImages } from "@/lib/imageStorage";
+import { getSupabaseAdmin, supabaseConfigured } from "@/lib/supabase/server";
 import { readTrip, readVersion, saveTrip } from "@/lib/tripStore";
 
 /*
@@ -11,7 +12,7 @@ import { readTrip, readVersion, saveTrip } from "@/lib/tripStore";
  * silently overwritten. Saving also needs a member's PIN, so guests can't write.
  */
 
-/** Keep requests a sensible size (photos are stored inline as data URLs). */
+/** Keep requests a sensible size (photos normally live in Supabase Storage; older ones may still be inline). */
 const MAX_BYTES = 9 * 1024 * 1024;
 
 const json = (data: unknown, status = 200) =>
@@ -68,7 +69,11 @@ export async function PUT(request: Request) {
     const current = await readTrip();
     if (!(await canWrite(request, current.trip))) return json({ error: "pin" }, 403);
     const result = await saveTrip(baseVersion, trip);
-    if (result.ok) return json({ version: result.version, updatedAt: result.updatedAt });
+    if (result.ok) {
+      // Photos this save dropped (deleted activity, removed photo, …) are cleared from Storage.
+      after(() => removeUnlinkedImages(getSupabaseAdmin()!, current.trip, trip).catch((e) => console.error(e)));
+      return json({ version: result.version, updatedAt: result.updatedAt });
+    }
     return json(await readTrip(), 409);
   } catch (e) {
     return json({ error: (e as Error).message }, 502);
