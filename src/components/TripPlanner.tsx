@@ -583,6 +583,7 @@ export function TripPlanner() {
           <div className="min-w-0 space-y-4">
             {selectedDay === "all" ? (
               <TripSummary
+                tripName={trip.name}
                 days={trip.days}
                 activities={trip.activities}
                 categories={trip.categories}

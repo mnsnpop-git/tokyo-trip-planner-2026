@@ -63,10 +63,19 @@ export function EyeIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-const ICONS = { edit: PencilIcon, delete: TrashIcon, add: PlusIcon, close: XIcon, confirm: CheckIcon, view: EyeIcon };
+export function ShareIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 12.5V3m0 0L6.5 6.5M10 3l3.5 3.5" />
+      <path d="M6 9.5H5a1.5 1.5 0 0 0-1.5 1.5v4.5A1.5 1.5 0 0 0 5 17h10a1.5 1.5 0 0 0 1.5-1.5V11A1.5 1.5 0 0 0 15 9.5h-1" />
+    </svg>
+  );
+}
+
+const ICONS = { edit: PencilIcon, delete: TrashIcon, add: PlusIcon, close: XIcon, confirm: CheckIcon, view: EyeIcon, share: ShareIcon };
 
 /** Icons guests still see (they only look, never change anything). */
-const GUEST_ICONS = new Set<keyof typeof ICONS>(["close", "view"]);
+const GUEST_ICONS = new Set<keyof typeof ICONS>(["close", "view", "share"]);
 
 type Tone = "ghost" | "danger" | "solid";
 

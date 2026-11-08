@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Progress } from "./Progress";
 import { TravelSection, TravelStrip } from "./Travel";
+import { IconButton } from "./Icons";
+import { ShareDayImage } from "./ShareDayImage";
 import {
   activePlace,
   categoryBadge,
@@ -26,6 +28,7 @@ type GroupBy = "day" | "category";
 
 /** Trip overview shown on the "All" day tab: totals, then activities grouped per day or per category. */
 export function TripSummary({
+  tripName,
   days,
   activities,
   categories,
@@ -37,6 +40,7 @@ export function TripSummary({
   onTravelChange,
   onOpenDay,
 }: {
+  tripName: string;
   flights: Flight[];
   hotels: Hotel[];
   members: Member[];
@@ -50,6 +54,8 @@ export function TripSummary({
   onOpenDay: (dayId: string) => void;
 }) {
   const [groupBy, setGroupBy] = useState<GroupBy>("day");
+  /** Day whose share image is open. */
+  const [sharingDay, setSharingDay] = useState<string | null>(null);
   // Day ids whose activity list is collapsed; everything starts expanded.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const toggleDay = (id: string) =>
@@ -84,6 +90,25 @@ export function TripSummary({
 
   return (
     <section aria-label="สรุปทริปทั้งหมด" className="space-y-6">
+      {sharingDay &&
+        (() => {
+          const i = days.findIndex((d) => d.id === sharingDay);
+          if (i < 0) return null;
+          return (
+            <ShareDayImage
+              input={{
+                tripName,
+                day: days[i],
+                dayNumber: i + 1,
+                activities: ordered.filter((a) => a.dayId === sharingDay),
+                categories,
+                flights,
+                hotels,
+              }}
+              onClose={() => setSharingDay(null)}
+            />
+          );
+        })()}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="จำนวนวัน" value={`${days.length}`} unit="วัน" />
         <Stat label="กิจกรรมทั้งหมด" value={`${ordered.length}`} unit="รายการ" />
@@ -148,9 +173,6 @@ export function TripSummary({
           {days.map((day, i) => {
             const items = ordered.filter((a) => a.dayId === day.id);
             const done = items.filter((a) => a.visited).length;
-            const counts = allCategories
-              .map((c) => ({ c, n: items.filter((a) => a.category === c.id).length }))
-              .filter((x) => x.n > 0);
             const isOpen = !collapsed.has(day.id);
             const listId = `summary-day-${day.id}`;
             return (
@@ -178,27 +200,20 @@ export function TripSummary({
                       <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">{baht(costOfList(items))}</span>
                     )}
                   </button>
-                  <button
-                    onClick={() => onOpenDay(day.id)}
-                    className="shrink-0 self-start rounded-full px-2.5 py-1 text-xs font-medium text-baby-ink hover:bg-baby"
-                  >
-                    ดู Timeline →
-                  </button>
+                  <span className="flex shrink-0 items-center gap-0.5 self-start">
+                    <IconButton icon="share" size="sm" label={`แชร์รูป DAY ${i + 1}`} onClick={() => setSharingDay(day.id)} />
+                    <button
+                      onClick={() => onOpenDay(day.id)}
+                      className="rounded-full px-2.5 py-1 text-xs font-medium text-baby-ink hover:bg-baby"
+                    >
+                      ดู Timeline →
+                    </button>
+                  </span>
                 </header>
 
                 <Progress done={done} total={items.length} />
 
                 <TravelStrip date={day.date} flights={flights} hotels={hotels} className="mt-3" />
-
-                {counts.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {counts.map(({ c, n }) => (
-                      <span key={c.id} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${categoryBadge(c)}`}>
-                        {c.icon} {c.label} · {n}
-                      </span>
-                    ))}
-                  </div>
-                )}
 
                 <div id={listId} hidden={!isOpen}>
                   {items.length === 0 ? (
