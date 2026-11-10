@@ -12,6 +12,7 @@ import { Expenses } from "./Expenses";
 import { Checklist } from "./Checklist";
 import { Categories } from "./Categories";
 import { GUEST, ProfileSelect, ProfileSwitcher } from "./ProfileSelect";
+import { IDLE_TIMEOUT_MS, isIdleExpired, useIdleTimeout } from "@/lib/useIdleTimeout";
 import { TripSummary } from "./TripSummary";
 import { HamburgerNav, type MenuItem } from "./MainMenu";
 import { Members } from "./Members";
@@ -193,18 +194,30 @@ function loadSession(): Session | null {
     // Profiles chosen before PINs existed have to enter their PIN once.
     localStorage.removeItem(OLD_PROFILE_KEY);
     const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") as Session | null;
-    if (s && ("guest" in s ? s.guest === true : typeof s.memberId === "string" && typeof s.pin === "string")) return s;
+    if (s && ("guest" in s ? s.guest === true : typeof s.memberId === "string" && typeof s.pin === "string")) {
+      // Left unused for too long (e.g. the tab was closed): sign in again.
+      if (isIdleExpired()) {
+        localStorage.removeItem(SESSION_KEY);
+        sessionExpiredOnLoad = true;
+        return null;
+      }
+      return s;
+    }
   } catch {
     // unreadable: ask again
   }
   return null;
 }
+/** Set by loadSession when it dropped a session for being idle, so the login page can say why. */
+let sessionExpiredOnLoad = false;
 
 export function TripPlanner() {
   use(browser("The trip plan is stored in this browser's localStorage."));
 
   const [trip, setTripState] = useState<TripData>(loadTrip);
   const [session, setSession] = useState<Session | null>(loadSession);
+  // Signed out for being idle: the login page says so until someone signs in.
+  const [timedOut, setTimedOut] = useState(() => sessionExpiredOnLoad);
   // Profile chosen from the header menu, waiting for its PIN.
   const [switchTo, setSwitchTo] = useState<Member | null>(null);
   const isGuest = !!session && "guest" in session;
@@ -340,12 +353,21 @@ export function TripPlanner() {
       // storage blocked; the choice still holds for this session
     }
   };
-  const signIn = (memberId: string, pin: string) => saveSession({ memberId, pin });
+  const signIn = (memberId: string, pin: string) => {
+    setTimedOut(false);
+    saveSession({ memberId, pin });
+  };
   const signOut = () => {
     saveSession(null);
+    setSwitchTo(null);
     setView("plan");
     window.scrollTo({ top: 0 });
   };
+  // Back to the login page after IDLE_TIMEOUT_MS without use (members and guests alike).
+  useIdleTimeout(!!session, () => {
+    signOut();
+    setTimedOut(true);
+  });
 
   /** Change the signed-in member's own PIN (the old one stays valid for the save that carries it). */
   const changeMyPin = (newPin: string) => {
@@ -465,7 +487,11 @@ export function TripPlanner() {
         // Until the shared trip has loaded, the members are only this browser's copy (or the default).
         loading={sync.status === "connecting"}
         onSelect={signIn}
-        onGuest={() => saveSession({ guest: true })}
+        onGuest={() => {
+          setTimedOut(false);
+          saveSession({ guest: true });
+        }}
+        notice={timedOut ? `ไม่มีการใช้งานเกิน ${IDLE_TIMEOUT_MS / 60000} นาที จึงออกจากระบบให้แล้ว — เลือกโปรไฟล์เพื่อเข้าใหม่` : undefined}
         onRestoreDefaults={() => patch({ members: DEFAULT_MEMBERS })}
       />
     );

@@ -138,6 +138,7 @@ export function ProfileSelect({
   onGuest,
   onRestoreDefaults,
   loading = false,
+  notice,
 }: {
   tripName: string;
   /** e.g. "2026", same as the header label "2026 Trip". */
@@ -151,6 +152,8 @@ export function ProfileSelect({
   onRestoreDefaults: () => void;
   /** Still fetching the shared trip: `members` may be just the built-in default, so don't show them yet. */
   loading?: boolean;
+  /** Why the user is here, e.g. signed out after being idle. */
+  notice?: string;
 }) {
   const [asking, setAsking] = useState<Member | null>(null);
   return (
@@ -168,6 +171,11 @@ export function ProfileSelect({
         {!loading && tripDates && <p className="mt-0.5 text-sm font-medium text-baby-ink">{tripDates}</p>}
         <h1 className="mt-2 text-3xl font-bold sm:text-4xl">ใครกำลังวางแผนอยู่? 🗼</h1>
         <p className="mt-2 text-sm text-ink-soft">เลือกโปรไฟล์เพื่อเข้าสู่แพลนทริป</p>
+        {notice && (
+          <p role="status" className="mx-auto mt-4 max-w-md rounded-2xl bg-baby px-4 py-2.5 text-sm font-medium text-baby-ink">
+            🔒 {notice}
+          </p>
+        )}
 
         {loading ? (
           <ul aria-busy="true" aria-label="กำลังโหลดโปรไฟล์" className="mt-10 flex flex-wrap justify-center gap-4 sm:gap-6">
