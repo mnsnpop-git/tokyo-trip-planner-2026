@@ -27,6 +27,7 @@ import {
   type TripData,
 } from "@/lib/trip";
 import { Modal, inputClass, labelClass } from "./Modal";
+import { MapPlaceField } from "./MapPlaceField";
 import { PayerField } from "./PayerField";
 import { DeleteButton, IconButton, openOnCardClick } from "./Icons";
 
@@ -655,7 +656,7 @@ function FormButtons({ error, onCancel }: { error: string; onCancel: () => void 
   );
 }
 
-const EMPTY_LEG: FlightLeg = { flightNo: "", from: "", to: "", departDate: "", departTime: "", arriveDate: "", arriveTime: "" };
+const EMPTY_LEG: FlightLeg = { flightNo: "", from: "", to: "", departDate: "", departTime: "", arriveDate: "", arriveTime: "", toMapUrl: "" };
 
 /** Flight number, airports (typed freely), and departure/arrival date-times of one leg. */
 function LegFields({ id, title, leg, onChange }: { id: string; title: string; leg: FlightLeg; onChange: (p: Partial<FlightLeg>) => void }) {
@@ -674,6 +675,16 @@ function LegFields({ id, title, leg, onChange }: { id: string; title: string; le
       <div>
         <label className={labelClass} htmlFor={`${id}-to`}>สนามบินปลายทาง</label>
         <input id={`${id}-to`} type="text" autoComplete="off" className={inputClass} value={leg.to} onChange={(e) => onChange({ to: e.target.value })} placeholder="เช่น นาริตะ" />
+      </div>
+      <div className="col-span-2">
+        {/* The arrival day's first trip (Trip Planner) starts here; without it the airport name is searched. */}
+        <MapPlaceField
+          id={`${id}-to-map`}
+          label="สนามบินปลายทางบน Google Maps"
+          value={leg.toMapUrl}
+          onChange={(toMapUrl) => onChange({ toMapUrl })}
+          onPick={(p) => !leg.to.trim() && onChange({ to: p.name })}
+        />
       </div>
       <div>
         <label className={labelClass} htmlFor={`${id}-dd`}>วันออก</label>
@@ -703,6 +714,7 @@ function LegFields({ id, title, leg, onChange }: { id: string; title: string; le
 
 function legError(leg: FlightLeg, name: string): string {
   if (!leg.from.trim() || !leg.to.trim()) return `${name}: ใส่สนามบินต้นทางและปลายทาง`;
+  if (leg.toMapUrl.trim() && !isSafeUrl(leg.toMapUrl.trim())) return `${name}: ลิงก์ Google Maps ต้องขึ้นต้นด้วย https://`;
   if (!leg.departDate) return `${name}: ใส่วันออก`;
   if (leg.arriveDate && leg.arriveDate < leg.departDate) return `${name}: วันถึงต้องไม่ก่อนวันออก`;
   return "";
@@ -713,6 +725,7 @@ const trimLeg = (l: FlightLeg): FlightLeg => ({
   flightNo: l.flightNo.trim().toUpperCase(),
   from: l.from.trim(),
   to: l.to.trim(),
+  toMapUrl: l.toMapUrl.trim(),
   arriveDate: l.arriveDate || l.departDate,
 });
 
@@ -757,6 +770,7 @@ function FlightForm({
         departTime: "",
         arriveDate: defaultDate,
         arriveTime: "",
+        toMapUrl: "",
         // Round trip by default.
         returnLeg: { ...EMPTY_LEG, departDate: defaultReturnDate, arriveDate: defaultReturnDate },
         bookingRef: "",

@@ -111,7 +111,10 @@ export function Itinerary({
       const landing = arrivalOn(flights, d.date, firstActivity(d.id)?.time);
       if (landing) {
         const at = landing.arriveTime ? ` (ลง ${landing.arriveTime})` : "";
-        return [d.id, { label: `🛬 จากสนามบิน ${landing.to}${at}`, name: airportQuery(landing.to), mapUrl: mapsSearchUrl(airportQuery(landing.to)), time: landing.arriveTime }];
+        const name = landing.to.trim() ? airportQuery(landing.to) : "";
+        // The airport's own map link when given; otherwise its code or name is looked up.
+        const mapUrl = landing.toMapUrl || (name ? mapsSearchUrl(name) : "");
+        return [d.id, { label: `🛬 จากสนามบิน ${landing.to || "ปลายทาง"}${at}`, name: name || "สนามบิน", mapUrl, time: landing.arriveTime }];
       }
       const hotel = startHotelOn(hotels, d.date);
       return [

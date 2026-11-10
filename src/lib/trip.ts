@@ -525,6 +525,8 @@ export interface FlightLeg {
   departTime: string;
   arriveDate: string;
   arriveTime: string;
+  /** Google Maps link of the arrival airport (optional; the day's first trip starts there). */
+  toMapUrl: string;
 }
 
 export interface Flight {
@@ -541,6 +543,8 @@ export interface Flight {
   departTime: string;
   arriveDate: string;
   arriveTime: string;
+  /** Google Maps link of the arrival airport (optional). */
+  toMapUrl: string;
   bookingRef: string;
   booked: boolean;
   note: string;
@@ -617,7 +621,7 @@ export function flightLegs(f: Flight): { leg: FlightLeg; kind: "outbound" | "ret
 export function arrivalOn(flights: Flight[], date: string, by?: string): FlightLeg | null {
   const landings = flights
     .flatMap(flightLegs)
-    .filter(({ leg, kind }) => kind !== "return" && leg.arriveDate === date && leg.to.trim())
+    .filter(({ leg, kind }) => kind !== "return" && leg.arriveDate === date && (leg.to.trim() || leg.toMapUrl))
     .map(({ leg }) => leg)
     .filter((leg) => !by || !leg.arriveTime || leg.arriveTime <= by)
     .sort((x, y) => x.arriveTime.localeCompare(y.arriveTime));
@@ -696,8 +700,11 @@ function normalizeLeg(v: unknown): FlightLeg | null {
     departTime: str(l.departTime),
     arriveDate: str(l.arriveDate),
     arriveTime: str(l.arriveTime),
+    toMapUrl: safeUrl(l.toMapUrl),
   };
 }
+
+const safeUrl = (v: unknown) => (typeof v === "string" && isSafeUrl(v.trim()) ? v.trim() : "");
 
 export function normalizeFlights(value: unknown, members: Member[]): Flight[] {
   if (!Array.isArray(value)) return [];
@@ -718,6 +725,7 @@ export function normalizeFlights(value: unknown, members: Member[]): Flight[] {
       departTime: str(f.departTime),
       arriveDate: str(f.arriveDate),
       arriveTime: str(f.arriveTime),
+      toMapUrl: safeUrl(f.toMapUrl),
       bookingRef: str(f.bookingRef),
       booked: f.booked === true,
       note: str(f.note),
