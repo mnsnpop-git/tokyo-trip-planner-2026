@@ -17,6 +17,8 @@ import {
   plansOf,
   slotFromTime,
   startHotelOn,
+  arrivalOn,
+  airportQuery,
   sumThb,
   uid,
   updatePlanBooking,
@@ -93,33 +95,51 @@ export function Itinerary({
     const url = activePlace(a).mapUrl.trim();
     return url && isSafeUrl(url) ? url : "";
   };
-  // Each day starts at a hotel; without a map link its address (or name) is looked up instead.
-  const startHotels = new Map(visibleDays.map((d) => [d.id, startHotelOn(hotels, d.date)]));
+  const firstActivity = (dayId: string) =>
+    activities.filter((a) => a.dayId === dayId).sort((a, b) => a.time.localeCompare(b.time))[0];
   const hotelLink = (h: Hotel) => {
     const url = h.mapUrl.trim();
     return url && isSafeUrl(url) ? url : h.address.trim() || h.name.trim() ? mapsSearchUrl(h.address.trim() || h.name.trim()) : "";
   };
-  const coords = useMapCoords(
-    [
-      ...activities.filter((a) => visibleIds.has(a.dayId)).map(linkOf),
-      ...[...startHotels.values()].map((h) => (h ? hotelLink(h) : "")),
-    ].filter(Boolean),
+  /**
+   * Where each day's first trip starts: on the day you land, the airport of the flight that lands
+   * before the first activity; otherwise the hotel (see startHotelOn). Places without a map link are
+   * looked up by their address, name or airport code.
+   */
+  const dayStarts = new Map(
+    visibleDays.map((d): [string, { label: string; name: string; mapUrl: string; time: string } | null] => {
+      const landing = arrivalOn(flights, d.date, firstActivity(d.id)?.time);
+      if (landing) {
+        const at = landing.arriveTime ? ` (ลง ${landing.arriveTime})` : "";
+        return [d.id, { label: `🛬 จากสนามบิน ${landing.to}${at}`, name: airportQuery(landing.to), mapUrl: mapsSearchUrl(airportQuery(landing.to)), time: landing.arriveTime }];
+      }
+      const hotel = startHotelOn(hotels, d.date);
+      return [
+        d.id,
+        hotel && { label: `🏨 จากที่พัก ${hotel.name}`, name: hotel.address.trim() || hotel.name, mapUrl: hotelLink(hotel), time: "" },
+      ];
+    }),
   );
-  /** Where place searches for a day should look first: its start hotel, then its activities, then anything known. */
+  const coords = useMapCoords(
+    [...activities.filter((a) => visibleIds.has(a.dayId)).map(linkOf), ...[...dayStarts.values()].map((p) => p?.mapUrl ?? "")].filter(
+      Boolean,
+    ),
+  );
+  /** Where place searches for a day should look first: where the day starts, then its activities, then anything known. */
   const nearFor = (dayId: string): LatLng | null => {
-    const hotel = startHotels.get(dayId);
-    const fromHotel = hotel ? coords.get(hotelLink(hotel)) : null;
-    if (fromHotel) return fromHotel;
+    const start = dayStarts.get(dayId);
+    const fromStart = start?.mapUrl ? coords.get(start.mapUrl) : null;
+    if (fromStart) return fromStart;
     for (const a of activities) {
       const c = a.dayId === dayId ? coords.get(linkOf(a)) : null;
       if (c) return c;
     }
     return [...coords.values()].find((c): c is LatLng => !!c) ?? null;
   };
-  const hotelEnd = (h: Hotel): LegEnd => {
-    const mapUrl = hotelLink(h);
-    return { name: h.address.trim() || h.name, time: "", mapUrl, coords: mapUrl ? coords.get(mapUrl) : null };
-  };
+  const startEnd = (p: { name: string; mapUrl: string; time: string }): LegEnd => ({
+    ...p,
+    coords: p.mapUrl ? coords.get(p.mapUrl) : null,
+  });
   const legEnd = (a: Activity): LegEnd => {
     const mapUrl = linkOf(a);
     return { name: activePlace(a).title, time: a.time, mapUrl, coords: mapUrl ? coords.get(mapUrl) : null };
@@ -145,7 +165,7 @@ export function Itinerary({
         // The day in time order: each activity is followed by the trip to the next one.
         const ordered = [...dayActs].sort((a, b) => a.time.localeCompare(b.time));
         const nextOf = (a: Activity) => ordered[ordered.indexOf(a) + 1];
-        const startHotel = startHotels.get(day.id);
+        const dayStart = dayStarts.get(day.id);
         const visitedCount = dayActs.filter((a) => a.visited).length;
         return (
           <div key={day.id}>
@@ -193,13 +213,8 @@ export function Itinerary({
                         {items.flatMap((a) => {
                           const next = nextOf(a);
                           return [
-                            a === ordered[0] && startHotel && (
-                              <TravelLeg
-                                key={`leg-hotel-${a.id}`}
-                                from={hotelEnd(startHotel)}
-                                to={legEnd(a)}
-                                label={`🏨 จากที่พัก ${startHotel.name}`}
-                              />
+                            a === ordered[0] && dayStart && (
+                              <TravelLeg key={`leg-start-${a.id}`} from={startEnd(dayStart)} to={legEnd(a)} label={dayStart.label} />
                             ),
                             <ActivityCard
                               key={a.id}

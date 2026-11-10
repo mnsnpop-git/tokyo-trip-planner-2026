@@ -609,6 +609,25 @@ export function flightLegs(f: Flight): { leg: FlightLeg; kind: "outbound" | "ret
   return f.returnLeg ? [first, { leg: f.returnLeg, kind: "return" }] : [first];
 }
 
+/**
+ * The flight leg that lands on `date` and brings you to the trip (flights home are left out).
+ * With `by` (HH:MM), only landings at or before that time count — e.g. before the day's first
+ * activity. The latest such landing wins; null if there is none.
+ */
+export function arrivalOn(flights: Flight[], date: string, by?: string): FlightLeg | null {
+  const landings = flights
+    .flatMap(flightLegs)
+    .filter(({ leg, kind }) => kind !== "return" && leg.arriveDate === date && leg.to.trim())
+    .map(({ leg }) => leg)
+    .filter((leg) => !by || !leg.arriveTime || leg.arriveTime <= by)
+    .sort((x, y) => x.arriveTime.localeCompare(y.arriveTime));
+  return landings.at(-1) ?? null;
+}
+
+/** Search text for an airport typed as a code or name: "NRT" → "NRT airport"; names already saying airport stay. */
+export const airportQuery = (name: string) =>
+  /airport|สนามบิน|空港/i.test(name) ? name.trim() : `${name.trim()} airport`;
+
 export function flightTitle(f: Flight): string {
   const name = f.flightNo || f.airlineName || f.airline;
   if (f.returnLeg) {
