@@ -140,6 +140,8 @@ function normalizeSubTasks(v: unknown): SubTask[] {
     }));
 }
 
+export type SubTaskOrder = "auto" | "manual";
+
 /** The place-specific part of a plan; used for both the main plan and the backup plan. */
 export interface Place {
   title: string;
@@ -148,6 +150,8 @@ export interface Place {
   images: string[]; // http(s) URLs or downscaled data:image URLs
   guidelines: string[]; // things people popularly do there
   subtasks: SubTask[]; // spots / mini-activities to tick off there
+  /** auto: sub-activities shown in the suggested route (nearest first); manual: in the stored, dragged order. */
+  subtaskOrder: SubTaskOrder;
   booking: Booking; // each plan (main/backups) has its own reservation
 }
 
@@ -308,7 +312,7 @@ export function planName(index: number, backupCount: number): string {
 
 export const MAX_IMAGES = 8;
 
-export const EMPTY_PLACE: Place = { title: "", note: "", mapUrl: "", images: [], guidelines: [], subtasks: [], booking: EMPTY_BOOKING };
+export const EMPTY_PLACE: Place = { title: "", note: "", mapUrl: "", images: [], guidelines: [], subtasks: [], subtaskOrder: "auto", booking: EMPTY_BOOKING };
 
 /** The plan currently in use: the selected backup if it exists, otherwise the main plan. */
 export function activePlace(a: Activity): Place {
@@ -327,6 +331,7 @@ function normalizePlace(p: LoosePlace | null | undefined): Place {
     images: strings(p?.images).filter(isSafeImageSrc),
     guidelines: strings(p?.guidelines),
     subtasks: normalizeSubTasks(p?.subtasks),
+    subtaskOrder: p?.subtaskOrder === "manual" ? "manual" : "auto",
     booking: normalizeBooking(p?.booking),
   };
 }
@@ -571,6 +576,18 @@ export function hotelNights(h: Pick<Hotel, "checkIn" | "checkOut">): number {
 
 /** Whether the hotel is where you sleep on the night of `date`. */
 export const staysOn = (h: Hotel, date: string) => h.checkIn <= date && date < h.checkOut;
+
+/**
+ * Where a day starts: the hotel you slept in the night before, or on the arrival day
+ * (no hotel the night before) the hotel you check into that day. null if neither.
+ */
+export function startHotelOn(hotels: Hotel[], date: string): Hotel | null {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() - 1);
+  const nightBefore = d.toISOString().slice(0, 10);
+  return hotels.find((h) => staysOn(h, nightBefore)) ?? hotels.find((h) => staysOn(h, date)) ?? null;
+}
 
 /** What the whole group pays for a cost split among `people`, staying `nights` nights. */
 export function travelTotal(c: TravelCost, people: number, nights = 1): number {

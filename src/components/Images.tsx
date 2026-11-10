@@ -85,10 +85,13 @@ export function ImagePicker({
   images,
   onUpdate,
   label = "รูปสถานที่",
+  allowUrl = true,
 }: {
   idPrefix: string;
   images: string[];
   label?: string;
+  /** false: upload only — a large "attach photos" button and no image-link field. */
+  allowUrl?: boolean;
   onUpdate: (update: (images: string[]) => string[]) => void;
 }) {
   const [url, setUrl] = useState("");
@@ -156,7 +159,26 @@ export function ImagePicker({
           ))}
         </div>
       )}
-      {room > 0 && (
+      {room > 0 && !allowUrl && (
+        <label
+          className={`flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line px-4 py-3 text-sm font-medium text-ink-soft transition hover:border-baby-ink hover:bg-baby/40 hover:text-ink ${
+            busy ? "pointer-events-none animate-pulse opacity-60" : ""
+          }`}
+        >
+          <PlusIcon className="h-6 w-6 shrink-0" />
+          <span>{busy ? "กำลังอัปโหลดรูป…" : `แนบรูป (เลือกได้หลายรูป · เหลืออีก ${room})`}</span>
+          <input
+            id={`${idPrefix}-upload`}
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => upload(e.currentTarget)}
+          />
+        </label>
+      )}
+      {room > 0 && allowUrl && (
         <div className="flex flex-wrap gap-2">
           <label
             title="อัปโหลดรูป"

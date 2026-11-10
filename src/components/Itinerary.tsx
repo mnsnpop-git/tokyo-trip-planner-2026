@@ -1,7 +1,7 @@
 "use client";
 
 import { useReadOnly } from "./ReadOnly";
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   EMPTY_PLACE,
   SLOTS,
@@ -16,6 +16,7 @@ import {
   planName,
   plansOf,
   slotFromTime,
+  startHotelOn,
   sumThb,
   uid,
   updatePlanBooking,
@@ -37,7 +38,11 @@ import { ImagePicker, ImageViewer } from "./Images";
 import { Progress } from "./Progress";
 import { DeleteButton, IconButton } from "./Icons";
 import { TravelStrip } from "./Travel";
+import { TravelLeg, type LegEnd } from "./TravelLeg";
+import { useMapCoords } from "@/lib/useMapCoords";
 import { SubTaskList } from "./SubTasks";
+import { MapPlaceField } from "./MapPlaceField";
+import type { LatLng } from "@/lib/travelEstimate";
 import { BookingFields, BookingInfo, cleanBooking, validateBooking } from "./Booking";
 
 type Draft = Omit<Activity, "id"> & { id?: string };
@@ -83,6 +88,42 @@ export function Itinerary({
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const visibleDays = selectedDayId === "all" ? days : days.filter((d) => d.id === selectedDayId);
+  const visibleIds = new Set(visibleDays.map((d) => d.id));
+  const linkOf = (a: Activity) => {
+    const url = activePlace(a).mapUrl.trim();
+    return url && isSafeUrl(url) ? url : "";
+  };
+  // Each day starts at a hotel; without a map link its address (or name) is looked up instead.
+  const startHotels = new Map(visibleDays.map((d) => [d.id, startHotelOn(hotels, d.date)]));
+  const hotelLink = (h: Hotel) => {
+    const url = h.mapUrl.trim();
+    return url && isSafeUrl(url) ? url : h.address.trim() || h.name.trim() ? mapsSearchUrl(h.address.trim() || h.name.trim()) : "";
+  };
+  const coords = useMapCoords(
+    [
+      ...activities.filter((a) => visibleIds.has(a.dayId)).map(linkOf),
+      ...[...startHotels.values()].map((h) => (h ? hotelLink(h) : "")),
+    ].filter(Boolean),
+  );
+  /** Where place searches for a day should look first: its start hotel, then its activities, then anything known. */
+  const nearFor = (dayId: string): LatLng | null => {
+    const hotel = startHotels.get(dayId);
+    const fromHotel = hotel ? coords.get(hotelLink(hotel)) : null;
+    if (fromHotel) return fromHotel;
+    for (const a of activities) {
+      const c = a.dayId === dayId ? coords.get(linkOf(a)) : null;
+      if (c) return c;
+    }
+    return [...coords.values()].find((c): c is LatLng => !!c) ?? null;
+  };
+  const hotelEnd = (h: Hotel): LegEnd => {
+    const mapUrl = hotelLink(h);
+    return { name: h.address.trim() || h.name, time: "", mapUrl, coords: mapUrl ? coords.get(mapUrl) : null };
+  };
+  const legEnd = (a: Activity): LegEnd => {
+    const mapUrl = linkOf(a);
+    return { name: activePlace(a).title, time: a.time, mapUrl, coords: mapUrl ? coords.get(mapUrl) : null };
+  };
 
   const openNew = (dayId: string, slot: Slot) =>
     setDraft({
@@ -101,6 +142,10 @@ export function Itinerary({
       {visibleDays.map((day) => {
         const index = days.findIndex((d) => d.id === day.id) + 1;
         const dayActs = activities.filter((a) => a.dayId === day.id);
+        // The day in time order: each activity is followed by the trip to the next one.
+        const ordered = [...dayActs].sort((a, b) => a.time.localeCompare(b.time));
+        const nextOf = (a: Activity) => ordered[ordered.indexOf(a) + 1];
+        const startHotel = startHotels.get(day.id);
         const visitedCount = dayActs.filter((a) => a.visited).length;
         return (
           <div key={day.id}>
@@ -145,23 +190,35 @@ export function Itinerary({
                       </p>
                     ) : (
                       <ul className="mt-3 space-y-2.5">
-                        {items.map((a) => (
-                          <ActivityCard
-                            key={a.id}
-                            activity={a}
-                            category={findCategory(categories, a.category)}
-                            members={members}
-                            currentMemberId={currentMemberId}
-                            start={activityStart(day.date, a.time)}
-                            costs={costs.get(a.id) ?? []}
-                            thbPerJpy={thbPerJpy}
-                            toBuy={wishesToBuy.get(a.id) ?? 0}
-                            onOpenWishlist={() => onOpenWishlist(a.id)}
-                            onChange={onSave}
-                            onEdit={() => setDraft(a)}
-                            onDelete={() => onDelete(a.id)}
-                          />
-                        ))}
+                        {items.flatMap((a) => {
+                          const next = nextOf(a);
+                          return [
+                            a === ordered[0] && startHotel && (
+                              <TravelLeg
+                                key={`leg-hotel-${a.id}`}
+                                from={hotelEnd(startHotel)}
+                                to={legEnd(a)}
+                                label={`🏨 จากที่พัก ${startHotel.name}`}
+                              />
+                            ),
+                            <ActivityCard
+                              key={a.id}
+                              activity={a}
+                              category={findCategory(categories, a.category)}
+                              members={members}
+                              currentMemberId={currentMemberId}
+                              start={activityStart(day.date, a.time)}
+                              costs={costs.get(a.id) ?? []}
+                              thbPerJpy={thbPerJpy}
+                              toBuy={wishesToBuy.get(a.id) ?? 0}
+                              onOpenWishlist={() => onOpenWishlist(a.id)}
+                              onChange={onSave}
+                              onEdit={() => setDraft(a)}
+                              onDelete={() => onDelete(a.id)}
+                            />,
+                            next && <TravelLeg key={`leg-${a.id}`} from={legEnd(a)} to={legEnd(next)} />,
+                          ];
+                        })}
                       </ul>
                     )}
                   </li>
@@ -176,6 +233,7 @@ export function Itinerary({
         <ActivityForm
           draft={draft}
           days={days}
+          near={nearFor(draft.dayId)}
           categories={categories}
           members={members}
           currentMemberId={currentMemberId}
@@ -585,8 +643,10 @@ function ActivityCard({
                         <PlaceView place={place} onViewImage={(index) => setViewing({ place, index })} />
                         <SubTaskList
                           placeTitle={place.title}
+                          placeMapUrl={place.mapUrl}
                           subtasks={place.subtasks}
-                          onChange={(subtasks) => onChange(updatePlace(a, i, (p) => ({ ...p, subtasks })))}
+                          order={place.subtaskOrder}
+                          onChange={(subtasks, subtaskOrder) => onChange(updatePlace(a, i, (p) => ({ ...p, subtasks, subtaskOrder })))}
                         />
                         <BookingInfo title={place.title} booking={place.booking} members={members} start={start} onToggleBooked={readOnly ? undefined : () => toggleBooked(i)} />
                       </div>
@@ -602,8 +662,10 @@ function ActivityCard({
                   <>
                     <SubTaskList
                       placeTitle={a.title}
+                      placeMapUrl={a.mapUrl}
                       subtasks={a.subtasks}
-                      onChange={(subtasks) => onChange(updatePlace(a, 0, (p) => ({ ...p, subtasks })))}
+                      order={a.subtaskOrder}
+                      onChange={(subtasks, subtaskOrder) => onChange(updatePlace(a, 0, (p) => ({ ...p, subtasks, subtaskOrder })))}
                     />
                     <BookingInfo title={a.title} booking={a.booking} members={members} start={start} onToggleBooked={readOnly ? undefined : () => toggleBooked(0)} />
                   </>
@@ -676,20 +738,51 @@ function PlaceView({
         </div>
       )}
 
-      {place.guidelines.length > 0 && (
-        <details className="mt-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-sm">
-          <summary className="cursor-pointer text-xs font-medium text-ink-soft">
-            Tips! ({place.guidelines.length})
-          </summary>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5">
-            {place.guidelines.map((g, i) => (
-              <li key={i}>{g}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-
+      {place.guidelines.length > 0 && <TipsGuide title={place.title} tips={place.guidelines} />}
     </>
+  );
+}
+
+/** Popular things to do at a place, as a small numbered guide card that folds like the sub-activity list. */
+function TipsGuide({ title, tips }: { title: string; tips: string[] }) {
+  const [open, setOpen] = useState(true);
+  const listId = useId();
+
+  return (
+    <section aria-label={`Tips Guide: ${title}`} className="mt-2 rounded-xl border border-baby-ink/15 bg-baby/60 px-2.5 py-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={listId}
+        className="flex w-full items-center gap-1.5 rounded-lg text-left text-xs font-semibold"
+      >
+        <svg
+          aria-hidden
+          viewBox="0 0 20 20"
+          className={`h-3 w-3 shrink-0 text-baby-ink transition-transform ${open ? "rotate-90" : ""}`}
+          fill="currentColor"
+        >
+          <path d="M7 4l7 6-7 6V4z" />
+        </svg>
+        <span aria-hidden>💡</span>
+        <span className="text-baby-ink">Tips Guide</span>
+        <span className="font-medium text-ink-soft">{tips.length} ข้อ</span>
+      </button>
+      <ol id={listId} hidden={!open} className="mt-1.5 space-y-1">
+        {tips.map((tip, i) => (
+          <li key={i} className="flex items-start gap-2 text-xs leading-snug">
+            <span
+              aria-hidden
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-baby-ink text-[10px] font-bold text-white"
+            >
+              {i + 1}
+            </span>
+            <span className="min-w-0 flex-1 break-words">{tip}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -702,6 +795,7 @@ const pickPlace = (f: Place): Place => ({
   images: f.images,
   guidelines: f.guidelines,
   subtasks: f.subtasks,
+  subtaskOrder: f.subtaskOrder,
   booking: f.booking,
 });
 
@@ -719,11 +813,14 @@ function ActivityForm({
   categories,
   members,
   currentMemberId,
+  near,
   onCancel,
   onSubmit,
 }: {
   draft: Draft;
   days: Day[];
+  /** Place search ranks results near here first. */
+  near: LatLng | null;
   categories: Category[];
   members: Member[];
   currentMemberId: string;
@@ -905,6 +1002,7 @@ function ActivityForm({
                 members={members}
                 currentMemberId={currentMemberId}
                 start={start}
+                near={near}
                 autoFocus={i === 0}
               />
             </div>
@@ -956,6 +1054,7 @@ function PlaceFields({
   members,
   currentMemberId,
   start,
+  near,
   autoFocus,
 }: {
   idPrefix: string;
@@ -964,6 +1063,7 @@ function PlaceFields({
   members: Member[];
   currentMemberId: string;
   start: Date | null;
+  near: LatLng | null;
   autoFocus?: boolean;
 }) {
   const id = (name: string) => `${idPrefix}-${name}`;
@@ -983,19 +1083,13 @@ function PlaceFields({
         />
       </div>
 
-      <div>
-        <label className={labelClass} htmlFor={id("map")}>ลิงก์ Google Maps</label>
-        <input
-          id={id("map")}
-          type="url"
-          inputMode="url"
-          className={inputClass}
-          value={place.mapUrl}
-          onChange={(e) => setField("mapUrl", e.target.value)}
-          placeholder="https://maps.app.goo.gl/…"
-        />
-        <p className="mt-1 text-[11px] text-ink-soft">เว้นว่างได้ — ระบบจะค้นหาจากชื่อสถานที่ให้</p>
-      </div>
+      <MapPlaceField
+        id={id("map")}
+        value={place.mapUrl}
+        near={near}
+        onChange={(mapUrl) => setField("mapUrl", mapUrl)}
+        onPick={(p) => onUpdate((x) => (x.title.trim() ? x : { ...x, title: p.name }))}
+      />
 
       <div>
         <label className={labelClass} htmlFor={id("note")}>โน้ต</label>
@@ -1011,6 +1105,7 @@ function PlaceFields({
 
       <ImagePicker
         idPrefix={idPrefix}
+        allowUrl={false}
         images={place.images}
         onUpdate={(update) => onUpdate((p) => ({ ...p, images: update(p.images) }))}
       />
