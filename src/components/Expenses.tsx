@@ -167,12 +167,12 @@ export function Expenses({
       )}
 
       {adding && (
-        <NewExpense
+        <ExpenseForm
           members={members}
           currentMemberId={currentMemberId}
           activityGroups={activityGroups}
           onCancel={() => setAdding(false)}
-          onAdd={(e) => {
+          onSave={(e) => {
             onChange({ expenses: [e, ...expenses] });
             setAdding(false);
             setTab("list");
@@ -379,6 +379,7 @@ function ExpenseList({
 }) {
   const readOnly = useReadOnly();
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const { members, expenses, thbPerJpy } = data;
   const { fmt, other } = unitFormat(unit, thbPerJpy);
   const [person, setPerson] = useState("all");
@@ -402,6 +403,27 @@ function ExpenseList({
     const paidShares = { ...data.paidShares };
     delete paidShares[e.id];
     onChange({ expenses: expenses.filter((x) => x.id !== e.id), paidShares });
+  };
+
+  /** Mark or unmark that a member has paid their share of an expense. */
+  const togglePaid = (e: Expense, id: string) => {
+    const current = data.paidShares[e.id] ?? [];
+    const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+    const paidShares = { ...data.paidShares };
+    if (next.length) paidShares[e.id] = next;
+    else delete paidShares[e.id];
+    onChange({ paidShares });
+  };
+  /** The payer of a paid-first expense has paid by definition, so their share can't be toggled. */
+  const isPayer = (e: Expense, id: string) => !e.selfPaid && id === e.paidBy;
+
+  const saveExpense = (updated: Expense) => {
+    // Ticks for people no longer in the split (or now the payer) don't apply any more.
+    const kept = (data.paidShares[updated.id] ?? []).filter((id) => updated.splitAmong.includes(id) && !isPayer(updated, id));
+    const paidShares = { ...data.paidShares };
+    if (kept.length) paidShares[updated.id] = kept;
+    else delete paidShares[updated.id];
+    onChange({ expenses: expenses.map((x) => (x.id === updated.id ? updated : x)), paidShares });
   };
 
   const chip = (active: boolean) =>
@@ -482,6 +504,20 @@ function ExpenseList({
                   </p>
                 </div>
                 <p className="shrink-0 font-semibold">{money(e.amount, e.currency)}</p>
+                {person !== "all" && !readOnly && !isPayer(e, person) && (
+                  <button
+                    type="button"
+                    aria-pressed={paid(e, person)}
+                    aria-label={`${name(person)} จ่ายส่วนของ ${e.title} แล้ว`}
+                    title={paid(e, person) ? "จ่ายแล้ว — กดเพื่อยกเลิก" : "กดเพื่อติ๊กว่าจ่ายแล้ว"}
+                    onClick={() => togglePaid(e, person)}
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition ${
+                      paid(e, person) ? "border-done-ink/40 bg-done text-done-ink" : "border-line bg-white text-ink-soft hover:border-done-ink/40"
+                    }`}
+                  >
+                    {paid(e, person) ? "✓" : ""}
+                  </button>
+                )}
                 <IconButton icon="view" size="sm" label={`ดูรายละเอียด ${e.title}`} onClick={() => setViewingId(e.id)} />
               </li>
             );
@@ -530,7 +566,7 @@ function ExpenseList({
                         <dd className="min-w-0 flex-1">{v}</dd>
                       </div>
                     ))}
-                  {!isManual && e.activityId && activityLabel(e.activityId) && (
+                  {e.activityId && activityLabel(e.activityId) && (
                     <div className="flex gap-3 py-2">
                       <dt className="w-16 shrink-0 text-ink-soft">กิจกรรม</dt>
                       <dd className="min-w-0 flex-1">
@@ -552,22 +588,33 @@ function ExpenseList({
                 <div>
                   <p className="mb-1.5 text-xs font-medium text-ink-soft">
                     จ่ายส่วนของตัวเองแล้ว {paidCount}/{e.splitAmong.length}
+                    {!readOnly && <span className="font-normal"> · กดชื่อเพื่อติ๊ก/ยกเลิกว่าจ่ายแล้ว</span>}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {e.splitAmong.map((id) => {
                       const m = members.find((x) => x.id === id);
                       if (!m) return null;
-                      const isPayer = !e.selfPaid && id === e.paidBy;
+                      const payer = isPayer(e, id);
                       const done = paid(e, id);
-                      return (
-                        <span
-                          key={id}
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                            isPayer || done ? "bg-done text-done-ink" : "bg-alert text-alert-ink"
-                          }`}
-                        >
-                          {m.emoji} {m.name} {isPayer ? "· ออกก่อน" : done ? "✓" : "○"}
+                      const cls = `rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                        payer || done ? "bg-done text-done-ink" : "bg-alert text-alert-ink"
+                      }`;
+                      const text = `${m.emoji} ${m.name} ${payer ? "· ออกก่อน" : done ? "✓" : "○"}`;
+                      return payer || readOnly ? (
+                        <span key={id} className={cls}>
+                          {text}
                         </span>
+                      ) : (
+                        <button
+                          key={id}
+                          type="button"
+                          aria-pressed={done}
+                          aria-label={`${m.name} จ่ายส่วนของตัวเองแล้ว`}
+                          onClick={() => togglePaid(e, id)}
+                          className={`${cls} hover:opacity-80`}
+                        >
+                          {text}
+                        </button>
                       );
                     })}
                   </div>
@@ -576,23 +623,16 @@ function ExpenseList({
                 {isManual ? (
                   !readOnly && (
                     <div className="flex items-center gap-2 border-t border-line/60 pt-3">
-                      <ActivitySelect
-                        groups={activityGroups}
-                        value={e.activityId && data.activities.some((a) => a.id === e.activityId) ? e.activityId : ""}
-                        onChange={(id) =>
-                          onChange({
-                            expenses: expenses.map((x) => {
-                              if (x.id !== e.id) return x;
-                              const next: Expense = { ...x, activityId: id };
-                              if (!id) delete next.activityId;
-                              return next;
-                            }),
-                          })
-                        }
-                        ariaLabel={`กิจกรรมของ ${e.title}`}
-                        className="min-w-0 flex-1 truncate rounded-xl border border-line bg-surface/60 px-2.5 py-1.5 text-base sm:text-sm"
-                        emptyLabel="ผูกกับกิจกรรม…"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          close();
+                          setEditingId(e.id);
+                        }}
+                        className="min-w-0 flex-1 rounded-xl bg-surface/60 px-3 py-2.5 text-left text-sm font-medium text-baby-ink hover:bg-baby"
+                      >
+                        ✏️ แก้ไขรายละเอียด
+                      </button>
                       <DeleteButton
                         label={`ลบ ${e.title}`}
                         onConfirm={() => {
@@ -619,36 +659,61 @@ function ExpenseList({
             </Modal>
           );
         })()}
+
+      {editingId &&
+        (() => {
+          const e = expenses.find((x) => x.id === editingId);
+          if (!e) return null;
+          return (
+            <ExpenseForm
+              initial={e}
+              members={members}
+              activityGroups={activityGroups}
+              onCancel={() => setEditingId(null)}
+              onSave={(updated) => {
+                saveExpense(updated);
+                setEditingId(null);
+                setViewingId(updated.id);
+              }}
+            />
+          );
+        })()}
     </div>
   );
 }
 
 const activityById = (data: TripData, id: string) => data.activities.find((a) => a.id === id);
 
-// ---------- New expense ----------
+// ---------- New / edit expense ----------
 
-function NewExpense({
+/** Form for an expense added in Budget: empty for a new one, or prefilled with `initial` to edit it. */
+function ExpenseForm({
+  initial,
   members,
   currentMemberId,
   activityGroups,
   onCancel,
-  onAdd,
+  onSave,
 }: {
+  initial?: Expense;
   members: Member[];
   currentMemberId?: string;
   activityGroups: ActivityGroup[];
   onCancel: () => void;
-  onAdd: (e: Expense) => void;
+  onSave: (e: Expense) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState<Currency>("JPY");
-  const [paidBy, setPaidBy] = useState(
-    currentMemberId && members.some((m) => m.id === currentMemberId) ? currentMemberId : (members[0]?.id ?? ""),
+  const defaultPayer =
+    currentMemberId && members.some((m) => m.id === currentMemberId) ? currentMemberId : (members[0]?.id ?? "");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
+  const [currency, setCurrency] = useState<Currency>(initial?.currency ?? "JPY");
+  const [paidBy, setPaidBy] = useState(initial?.paidBy || defaultPayer);
+  const [split, setSplit] = useState<string[]>(initial?.splitAmong ?? members.map((m) => m.id));
+  const [activityId, setActivityId] = useState(
+    initial?.activityId && activityGroups.some((g) => g.acts.some((a) => a.id === initial.activityId)) ? initial.activityId : "",
   );
-  const [split, setSplit] = useState<string[]>(members.map((m) => m.id));
-  const [activityId, setActivityId] = useState("");
-  const [selfPaid, setSelfPaid] = useState(false);
+  const [date, setDate] = useState(initial?.date ?? "");
+  const [selfPaid, setSelfPaid] = useState(initial?.selfPaid ?? false);
   const [error, setError] = useState("");
 
   const submit = (ev: React.FormEvent) => {
@@ -659,8 +724,8 @@ function NewExpense({
     if (!Number.isFinite(value) || value <= 0) return setError("จำนวนเงินต้องมากกว่า 0");
     if (!selfPaid && !members.some((m) => m.id === paidBy)) return setError("เลือกคนที่จ่ายแทนก่อน");
     if (splitAmong.length === 0) return setError("เลือกคนที่หารอย่างน้อย 1 คน");
-    onAdd({
-      id: uid(),
+    onSave({
+      id: initial?.id ?? uid(),
       title: title.trim(),
       amount: value,
       currency,
@@ -668,11 +733,12 @@ function NewExpense({
       splitAmong,
       ...(selfPaid && { selfPaid: true }),
       ...(activityId && { activityId }),
+      ...(date && { date }),
     });
   };
 
   return (
-    <Modal title="ลงรายการใหม่" onClose={onCancel}>
+    <Modal title={initial ? `แก้ไข ${initial.title}` : "ลงรายการใหม่"} onClose={onCancel}>
       <form noValidate onSubmit={submit} className="space-y-3">
         <div>
           <label className={labelClass} htmlFor="exp-title">รายการ</label>
@@ -742,6 +808,10 @@ function NewExpense({
         <div>
           <label className={labelClass} htmlFor="exp-activity">กิจกรรม (ไม่บังคับ)</label>
           <ActivitySelect id="exp-activity" groups={activityGroups} value={activityId} onChange={setActivityId} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="exp-date">วันที่ (ไม่บังคับ)</label>
+          <input id="exp-date" type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         {error && <p className="rounded-xl bg-alert/60 px-3 py-2 text-sm text-alert-ink">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
