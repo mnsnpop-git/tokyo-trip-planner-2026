@@ -19,6 +19,7 @@ import { Members } from "./Members";
 import { Bookings } from "./Bookings";
 import { IconButton } from "./Icons";
 import { Wishlist } from "./Wishlist";
+import { Gallery } from "./Gallery";
 import {
   DEFAULT_MEMBERS,
   DEFAULT_TRIP_NAME,
@@ -39,6 +40,8 @@ import {
   normalizeWishTags,
   normalizeWishlist,
   normalizePaidShares,
+  normalizeGallery,
+  galleryByActivity,
   normalizeFlights,
   normalizeHotels,
   sortDays,
@@ -93,6 +96,7 @@ function normalizeTrip(parsedValue: unknown): TripData {
     hotels: has("hotels") ? normalizeHotels(trip.hotels, members) : [],
     // Saves from before "who has paid" ticks existed start with nothing ticked.
     paidShares: has("paidShares") ? normalizePaidShares(trip.paidShares) : {},
+    gallery: normalizeGallery(trip.gallery),
   };
 }
 
@@ -146,7 +150,7 @@ function loadTrip(): TripData {
   return SAMPLE_TRIP;
 }
 
-type View = "plan" | "bookings" | "wishlist" | "expenses" | "members" | "categories" | "checklist";
+type View = "plan" | "bookings" | "wishlist" | "expenses" | "gallery" | "members" | "categories" | "checklist";
 
 /** A page plus the element to scroll to there (and the day to show, for the Trip Planner). */
 export type GoTo = { view: View; elementId: string; day?: string };
@@ -156,6 +160,7 @@ const MENU: MenuItem<View>[] = [
   { id: "bookings", label: "Reservations", icon: "🎫" },
   { id: "wishlist", label: "Wishlist", icon: "🛍️" },
   { id: "expenses", label: "Budget", icon: "💴" },
+  { id: "gallery", label: "Gallery", icon: "📸" },
   { id: "members", label: "Travelers", icon: "👥" },
   { id: "categories", label: "Activity Type", icon: "🏷️" },
   { id: "checklist", label: "Checklist", icon: "🎒" },
@@ -404,6 +409,8 @@ export function TripPlanner() {
       activities: t.activities.filter((a) => a.id !== id),
       // Wishes bought "at" this activity stay on the list, just unlinked.
       wishlist: t.wishlist.map((w) => (w.activityId === id ? { ...w, activityId: "" } : w)),
+      // Photos too: they stay in the Gallery under "not linked".
+      gallery: t.gallery.map((p) => (p.activityId === id ? { ...p, activityId: "" } : p)),
     }));
 
   const saveCategory = (c: Category) =>
@@ -637,6 +644,7 @@ export function TripPlanner() {
                 flights={trip.flights}
                 hotels={trip.hotels}
                 wishesToBuy={wishesToBuyByActivity(trip.wishlist)}
+                photos={galleryByActivity(trip.gallery)}
                 onOpenWishlist={openWishlistAt}
                 onSave={saveActivity}
                 onDelete={deleteActivity}
@@ -677,6 +685,17 @@ export function TripPlanner() {
             onDeleteItem={deleteWish}
             onSaveTag={saveWishTag}
             onDeleteTag={deleteWishTag}
+          />
+        )}
+        {view === "gallery" && (
+          <Gallery
+            photos={trip.gallery}
+            days={trip.days}
+            activities={trip.activities}
+            members={trip.members}
+            currentMemberId={me.id}
+            onChange={(update) => setTrip((t) => ({ ...t, gallery: update(t.gallery) }))}
+            onOpenActivity={openActivity}
           />
         )}
         {view === "expenses" && <Expenses data={trip} currentMemberId={me.id} onChange={patch} onGoTo={goTo} />}

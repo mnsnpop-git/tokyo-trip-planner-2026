@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { MAX_IMAGES, isSafeUrl } from "@/lib/trip";
-import { useImageUpload } from "@/lib/imageUpload";
+import { useImageUpload, type UploadImage } from "@/lib/imageUpload";
 import { Modal, inputClass, labelClass } from "./Modal";
 import { IconButton, PlusIcon, TrashIcon } from "./Icons";
 
@@ -13,12 +13,15 @@ export function ImageViewer({
   index,
   onIndex,
   onClose,
+  footer,
 }: {
   title: string;
   images: string[];
   index: number;
   onIndex: (i: number) => void;
   onClose: () => void;
+  /** Extra content under the photo (e.g. a gallery photo's caption and actions). */
+  footer?: (index: number) => ReactNode;
 }) {
   const n = images.length;
   const go = (d: number) => onIndex((index + d + n) % n);
@@ -49,6 +52,7 @@ export function ImageViewer({
           </button>
         </div>
       )}
+      {footer?.(index)}
     </Modal>
   );
 }
@@ -80,6 +84,32 @@ async function toDataUrl(file: File): Promise<string> {
   });
 }
 
+/**
+ * Shrink and upload picked photos (falling back to inline copies when there's no server storage).
+ * Returns the photo links that made it, plus a Thai error message if any failed.
+ */
+export async function uploadPhotos(files: File[], uploadImage: UploadImage): Promise<{ urls: string[]; error: string }> {
+  const results = await Promise.allSettled(
+    files.map(async (f) => {
+      let small: Blob;
+      try {
+        small = await downscaleImage(f);
+      } catch {
+        throw new Error("read");
+      }
+      return (await uploadImage(small)) ?? (await toDataUrl(f));
+    }),
+  );
+  const urls = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  const error = failed.some((r) => (r.reason as Error).message === "read")
+    ? "อ่านไฟล์รูปบางไฟล์ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG"
+    : failed.length > 0
+      ? "อัปโหลดรูปไม่สำเร็จ ลองเช็กอินเทอร์เน็ตแล้วลองใหม่"
+      : "";
+  return { urls, error };
+}
+
 export function ImagePicker({
   idPrefix,
   images,
@@ -107,21 +137,9 @@ export function ImagePicker({
     if (files.length === 0) return;
     setError("");
     setBusy(true);
-    const results = await Promise.allSettled(
-      files.slice(0, room).map(async (f) => {
-        let small: Blob;
-        try {
-          small = await downscaleImage(f);
-        } catch {
-          throw new Error("read");
-        }
-        return (await uploadImage(small)) ?? (await toDataUrl(f));
-      }),
-    );
-    add(results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])));
-    const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-    if (failed.some((r) => (r.reason as Error).message === "read")) setError("อ่านไฟล์รูปบางไฟล์ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG");
-    else if (failed.length > 0) setError("อัปโหลดรูปไม่สำเร็จ ลองเช็กอินเทอร์เน็ตแล้วลองใหม่");
+    const { urls, error } = await uploadPhotos(files.slice(0, room), uploadImage);
+    add(urls);
+    if (error) setError(error);
     else if (files.length > room) setError(`ใส่รูปได้สูงสุด ${MAX_IMAGES} รูป`);
     setBusy(false);
   };

@@ -44,7 +44,27 @@ function merge(local: TripData, base: TripData, server: TripData): TripData {
   for (const k of Object.keys(local) as (keyof TripData)[]) {
     if (JSON.stringify(local[k]) !== JSON.stringify(base[k])) out[k] = local[k];
   }
+  // Friends often add photos at the same moment, so the Gallery merges photo by photo instead.
+  out.gallery = mergeById(local.gallery ?? [], base.gallery ?? [], server.gallery ?? []);
   return out as unknown as TripData;
+}
+
+/**
+ * Three-way merge of a list of items with ids: keeps the server's items, applies this device's
+ * additions, edits and deletions (relative to `base`), and puts this device's new items first.
+ */
+function mergeById<T extends { id: string }>(local: T[], base: T[], server: T[]): T[] {
+  const baseById = new Map(base.map((x) => [x.id, JSON.stringify(x)]));
+  const localById = new Map(local.map((x) => [x.id, x]));
+  const added = local.filter((x) => !baseById.has(x.id));
+  const kept = server
+    .filter((x) => !(baseById.has(x.id) && !localById.has(x.id))) // deleted here
+    .map((x) => {
+      const mine = localById.get(x.id);
+      return mine && JSON.stringify(mine) !== baseById.get(x.id) ? mine : x; // edited here
+    });
+  const serverIds = new Set(server.map((x) => x.id));
+  return [...added.filter((x) => !serverIds.has(x.id)), ...kept];
 }
 
 /**

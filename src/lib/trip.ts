@@ -771,7 +771,43 @@ export interface TripData {
   hotels: Hotel[];
   /** Per expense id: member ids who have paid their share (paid the payer back, or paid their own). */
   paidShares: Record<string, string[]>;
+  /** Shared trip moments, newest first; each can be linked to an activity. */
+  gallery: GalleryPhoto[];
   thbPerJpy: number;
+}
+
+// ---------- Gallery ----------
+
+/** A photo in the shared Gallery. */
+export interface GalleryPhoto {
+  id: string;
+  url: string; // https:// link (Supabase Storage) or an inline data:image copy in local-only mode
+  caption: string;
+  activityId: string; // "" = not linked to an activity
+  addedBy: string; // member id
+  addedAt: string; // ISO timestamp
+}
+
+export function normalizeGallery(value: unknown): GalleryPhoto[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((p): p is Record<string, unknown> => !!p && typeof p === "object")
+    .map((p) => ({
+      id: str(p.id) || uid(),
+      url: str(p.url),
+      caption: str(p.caption),
+      activityId: str(p.activityId),
+      addedBy: str(p.addedBy),
+      addedAt: str(p.addedAt),
+    }))
+    .filter((p) => p.url.startsWith("https://") || p.url.startsWith("data:image/"));
+}
+
+/** Gallery photos per linked activity id. */
+export function galleryByActivity(gallery: GalleryPhoto[]): Map<string, GalleryPhoto[]> {
+  const map = new Map<string, GalleryPhoto[]>();
+  for (const p of gallery) if (p.activityId) map.set(p.activityId, [...(map.get(p.activityId) ?? []), p]);
+  return map;
 }
 
 // ---------- Wishlist ----------
@@ -1256,4 +1292,5 @@ export const SAMPLE_TRIP: TripData = {
   flights: [],
   hotels: [],
   paidShares: {},
+  gallery: [],
 };

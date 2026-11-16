@@ -30,6 +30,7 @@ import {
   type Day,
   type Expense,
   type Flight,
+  type GalleryPhoto,
   type Hotel,
   type Member,
   type Place,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/trip";
 import { Modal, inputClass, labelClass } from "./Modal";
 import { ImagePicker, ImageViewer } from "./Images";
+import { GalleryBadge, GalleryViewer } from "./Gallery";
 import { Progress } from "./Progress";
 import { DeleteButton, IconButton } from "./Icons";
 import { TravelStrip } from "./Travel";
@@ -62,6 +64,7 @@ export function Itinerary({
   flights,
   hotels,
   wishesToBuy,
+  photos,
   onOpenWishlist,
   onSave,
   onDelete,
@@ -81,6 +84,8 @@ export function Itinerary({
   hotels: Hotel[];
   /** Wishes still to buy at each activity, keyed by activity id. */
   wishesToBuy: Map<string, number>;
+  /** Gallery photos linked to each activity, keyed by activity id. */
+  photos: Map<string, GalleryPhoto[]>;
   /** Open the Wishlist at this activity's items. */
   onOpenWishlist: (activityId: string) => void;
   onSave: (a: Activity) => void;
@@ -229,6 +234,9 @@ export function Itinerary({
                               costs={costs.get(a.id) ?? []}
                               thbPerJpy={thbPerJpy}
                               toBuy={wishesToBuy.get(a.id) ?? 0}
+                              photos={photos.get(a.id) ?? []}
+                              days={days}
+                              activities={activities}
                               onOpenWishlist={() => onOpenWishlist(a.id)}
                               onChange={onSave}
                               onEdit={() => setDraft(a)}
@@ -465,6 +473,9 @@ function ActivityCard({
   costs,
   thbPerJpy,
   toBuy,
+  photos,
+  days,
+  activities,
   onOpenWishlist,
   onChange,
   onEdit,
@@ -481,6 +492,10 @@ function ActivityCard({
   thbPerJpy: number;
   /** Wishlist items still to buy here. */
   toBuy: number;
+  /** Gallery photos linked to this activity; a small camera button shows only when there are some. */
+  photos: GalleryPhoto[];
+  days: Day[];
+  activities: Activity[];
   onOpenWishlist: () => void;
   onChange: (a: Activity) => void;
   onEdit: () => void;
@@ -498,7 +513,9 @@ function ActivityCard({
       return next;
     });
   const [viewing, setViewing] = useState<{ place: Place; index: number } | null>(null);
+  const [showPhotos, setShowPhotos] = useState(false);
   const title = activePlace(a).title;
+  const cornerPad = photos.length ? "sm:pr-32" : "sm:pr-20";
   const plans = plansOf(a);
   const total = sumThb(costs, thbPerJpy);
 
@@ -526,6 +543,7 @@ function ActivityCard({
 
       {/* Edit / delete: icons in the top-right corner */}
       <div className="absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5 rounded-full bg-white/80">
+        <GalleryBadge count={photos.length} label={`ดูรูป moment ของ ${title} (${photos.length})`} onClick={() => setShowPhotos(true)} />
         <IconButton
           icon="edit"
           label={`แก้ไข ${title}`}
@@ -554,7 +572,7 @@ function ActivityCard({
 
         <div className="min-w-0 flex-1">
           {a.visited && (
-            <p className="mb-1.5 text-xs sm:pr-20">
+            <p className={`mb-1.5 text-xs ${cornerPad}`}>
               <span className="rounded-full bg-visited px-2 py-0.5 font-semibold text-visited-ink">ไปแล้ว</span>
             </p>
           )}
@@ -563,7 +581,7 @@ function ActivityCard({
             aria-disabled={a.visited}
             className={`transition ${a.visited ? "select-none opacity-50 grayscale" : ""}`}
           >
-            <div className="flex flex-wrap items-center gap-1.5 sm:pr-20">
+            <div className={`flex flex-wrap items-center gap-1.5 ${cornerPad}`}>
               <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${categoryBadge(cat)}`}>
                 {cat.icon} {cat.label}
               </span>
@@ -701,6 +719,16 @@ function ActivityCard({
           index={viewing.index}
           onIndex={(index) => setViewing((v) => v && { ...v, index })}
           onClose={() => setViewing(null)}
+        />
+      )}
+      {showPhotos && (
+        <GalleryViewer
+          title={`📸 ${title}`}
+          photos={photos}
+          days={days}
+          activities={activities}
+          members={members}
+          onClose={() => setShowPhotos(false)}
         />
       )}
     </li>

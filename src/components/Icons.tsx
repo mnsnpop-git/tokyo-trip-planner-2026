@@ -26,6 +26,18 @@ export function TrashIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+export function CameraIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 20 20" className={className} fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M7.3 3.5a1.5 1.5 0 0 0-1.25.67L5.2 5.5H4A2 2 0 0 0 2 7.5v7A2 2 0 0 0 4 16.5h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-1.2l-.85-1.33a1.5 1.5 0 0 0-1.25-.67H7.3ZM10 14a3.25 3.25 0 1 0 0-6.5A3.25 3.25 0 0 0 10 14Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 export function PlusIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg aria-hidden viewBox="0 0 20 20" className={className} fill="currentColor">
